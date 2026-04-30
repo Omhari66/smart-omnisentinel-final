@@ -1,0 +1,108 @@
+
+
+Department of Computer Science & Engineering
+Phagwara, Punjab — 144001, India
+PROJECT REPORT
+
+
+AI-POWERED YOUTUBE VIDEO SUMMARIZER
+WITH SENTIMENT ANALYSIS AND SMART RECOMMENDATIONS
+
+
+Abstract
+This report presents an artificial-intelligence-driven web application designed to make YouTube video content instantly accessible, digestible, and navigable. The system accepts any public YouTube URL, automatically retrieves the video transcript, and applies a sequence of natural language processing models to generate a timestamped abstractive summary, a sentiment analysis of the content, a real like/dislike rating sourced from public data, and a panel of clickable related video recommendations — all rendered through a visually rich, dark-themed web interface.
+
+The summarization component employs the DistilBART-CNN-12-6 transformer model for abstractive text generation across chunked transcript segments. Sentiment classification is performed by a fine-tuned DistilBERT model trained on the SST-2 dataset. Rating data is retrieved from a free public API with no authentication requirement. Recommendations are scraped directly from YouTube, yielding real video titles, thumbnails, and clickable links. The entire pipeline runs locally using free, open-source tools with no paid API keys required.
+
+Background and Problem Statement
+YouTube is the world's largest video platform, hosting hundreds of millions of hours of educational, informational, and entertainment content. Despite this vast repository of knowledge, consuming video content remains inherently time-intensive. A viewer wishing to extract specific information from a lecture, tutorial, or documentary must watch the video in its entirety or scrub manually through the timeline — a process that is both inefficient and inaccessible to people with time constraints, hearing impairments, or language barriers.
+
+Existing browser-based summarization extensions are limited in capability, often producing extractive rather than abstractive summaries, and rarely integrating sentiment context, rating transparency, or recommendation discovery into a single interface. Server-based solutions typically require paid API subscriptions to YouTube’s Data API v3 or third-party summarization services, creating a cost barrier for students and independent developers.
+
+This project was conceived to address these gaps by delivering a fully free, locally executable, end-to-end video intelligence tool that summarizes, rates, and recommends YouTube content without requiring any API keys or external subscriptions.
+
+Review of Related Work
+Automated text summarization has been an active area of NLP research for several decades. Early approaches relied on extractive techniques that selected and reordered existing sentences based on term frequency and positional heuristics. The advent of sequence-to-sequence neural architectures and, subsequently, transformer-based models enabled true abstractive summarization — generating novel sentences that condense meaning rather than merely copying source content.
+
+BART (Lewis et al., 2020) and its distilled variants introduced high-quality abstractive summarization accessible on consumer hardware. DistilBERT (Sanh et al., 2019) demonstrated that knowledge distillation could produce compact models retaining over 95% of BERT’s performance at significantly reduced inference cost. These two model families form the NLP backbone of the present system.
+
+Prior YouTube summarization tools have been limited to extractive sentence selection or simple keyword extraction. Tools integrating sentiment analysis, real engagement metrics, and live recommendation scraping into a single free, locally runnable web interface have not been documented in the accessible literature, representing the primary novelty of this work.
+
+Data Description and Feature Engineering
+I.  Input Feature Set
+The system operates on unstructured video transcript data retrieved programmatically via the youtube-transcript-api library. No dataset is required for inference; the models are pre-trained and loaded from the HuggingFace model hub at application startup. The following table enumerates all inputs and derived features used across the processing pipeline:
+
+
+TABLE 1 — Input Features, Derived Variables, and Their Roles in the Processing Pipeline
+II.  Text Preprocessing and Chunking
+Raw transcript text is segmented into fixed-size chunks of approximately 80 words each, with the start timestamp of the first entry in each chunk preserved. This chunking strategy serves two purposes: (a) it constrains each text segment to within the maximum token window of the summarization model, preventing truncation errors; and (b) it creates a natural correspondence between each summary sentence and a specific temporal region of the video, enabling clickable timestamp navigation.
+
+No additional preprocessing (stemming, stopword removal, or lowercasing) is applied prior to model inference, as both transformer models are designed to accept raw natural-language text and apply their own internal tokenization and normalization via their respective tokenizers.
+
+System Architecture and Model Details
+I.  Overall System Architecture
+The system follows a modular, sequential pipeline architecture comprising six principal components:
+
+Input Layer — accepts a YouTube URL submitted via the web form; extracts the 11-character video ID using regex pattern matching.
+Transcript Retrieval Layer — fetches the video transcript using youtube-transcript-api, with language fallback (English → Hindi → any available).
+NLP Processing Engine — applies chunking, abstractive summarization (DistilBART), and sentiment classification (DistilBERT) to the transcript.
+Data Enrichment Layer — fetches real like/dislike ratio from returnyoutubedislikeapi.com and scrapes related video metadata from YouTube.
+Template Rendering Layer — passes all processed data to the Jinja2 HTML template engine for dynamic page generation.
+Presentation Layer — serves the rendered dark-theme web interface with animated UI elements, clickable timestamps, rating bars, and recommendation cards.
+
+The backend is implemented in Python 3 using the Flask microframework. Pre-trained model weights are downloaded from the HuggingFace Hub on first run and cached locally. Client-side rendering uses HTML5, CSS3, and vanilla JavaScript with Google Fonts for typography. The application runs as a local development server accessible via any standard web browser.
+II.  Machine Learning Model Descriptions
+Two pre-trained transformer models are employed, both loaded via the HuggingFace transformers pipeline API:
+
+
+TABLE 2 — Pre-Trained NLP Models, Tasks, and Roles in the Pipeline
+(a)  DistilBART-CNN-12-6: A distilled variant of the BART sequence-to-sequence model fine-tuned on the CNN/DailyMail news summarization benchmark. The model generates abstractive summaries of up to 60 tokens from input segments of up to 80 words, producing fluent, human-readable summary sentences that capture the core meaning of each transcript chunk.
+
+(b)  DistilBERT-SST-2: A distilled BERT model fine-tuned on the Stanford Sentiment Treebank binary classification task. The model assigns each transcript chunk a POSITIVE or NEGATIVE sentiment label with an associated confidence score, enabling the system to surface emotionally salient content regions of the video.
+III.  Rating and Recommendation Pipeline
+Real video engagement ratings are retrieved from the Return YouTube Dislike public API (returnyoutubedislikeapi.com), a community-maintained service that estimates dislike counts using browser extension telemetry. The API accepts a video ID and returns raw like and dislike counts, from which the system computes a positive sentiment percentage displayed as an animated progress bar.
+
+Related video recommendations are obtained by scraping the ytInitialData JSON object embedded in the YouTube watch page HTML response. A two-level fallback strategy is employed: (1) primary extraction attempts to navigate the twoColumnWatchNextResults → secondaryResults path within the JSON tree; (2) if the primary path yields no results, the system fetches the video’s title from the page title tag and performs a YouTube search for that title, then parses the videoRenderer entries from the search results page. This ensures recommendation results are returned even when YouTube alters its internal data structure.
+
+Technology Stack
+
+TABLE 3 — Complete Technology Stack with Component Roles
+
+User Interface and System Features
+The system is delivered as a locally hosted web application accessible via any standard browser at http://127.0.0.1:5000. The interface is designed around a dark cyberpunk aesthetic with animated visual elements intended to communicate the AI-driven nature of the tool. The interface comprises the following functional sections:
+
+Search Bar — An animated gradient-bordered input field accepts any YouTube video URL. A loading spinner is displayed during processing to indicate model inference progress.
+Video Summary Panel — The main panel displays the video URL with a live indicator, followed by the timestamped summary list. Each summary entry renders a clickable blue timestamp chip that opens the video at the corresponding position in a new browser tab.
+Rating Bar — A visual progress bar displays the real like/dislike ratio retrieved from the public API, with green indicating positive engagement and red indicating negative engagement, accompanied by percentage labels.
+Content Sentiment Analysis — A two-column section displays transcript segments classified as positive (green) or negative (red) by the DistilBERT model, providing users with a qualitative sense of the video’s emotional arc.
+Related Videos Sidebar — A right-side panel displays up to three related video recommendations as fully clickable cards, each showing the video thumbnail image (with fallback), title, and view count. Clicking any card opens the related video in a new tab.
+Error Handling — A styled error panel is displayed if an invalid URL is submitted or if the transcript cannot be retrieved (e.g., for videos with disabled captions).
+
+Key Technical Disclosures
+The following key technical contributions are disclosed by this document, presented in structured form for academic demonstration purposes only.
+
+1.   A computer-implemented web application for automated YouTube video summarization, comprising: (a) a URL ingestion and video ID extraction module using regular expression pattern matching; (b) a transcript retrieval module with multi-language fallback; (c) a text chunking engine producing fixed-width segments with preserved timestamps; (d) an abstractive summarization inference engine using a pre-trained DistilBART transformer model; and (e) a sentiment classification engine using a fine-tuned DistilBERT model.
+
+2.   The system of Disclosure 1, further comprising: (a) a real-time video engagement rating module querying a public dislike-count API; (b) a multi-path YouTube page scraping module for related video metadata retrieval with primary and search-based fallback strategies; and (c) a clickable timestamp rendering system encoding video segment start times as parameterized YouTube URLs.
+
+3.   The system of Disclosure 1, wherein the text chunking engine segments the transcript into chunks of approximately 80 words, preserving the start timestamp of the first transcript entry in each chunk, and wherein each chunk is independently processed by both the summarization and sentiment classification engines.
+
+4.   The system of Disclosure 2, wherein the related video scraping module employs a two-level fallback: (a) primary extraction via the twoColumnWatchNextResults path in the ytInitialData JSON object embedded in the YouTube watch page; and (b) secondary extraction via YouTube search results parsing using the video title as a query, executed when the primary path returns no results.
+
+5.   A method for generating a sentiment-annotated, timestamped abstractive summary of YouTube video content, comprising: receiving a YouTube URL; extracting the video ID; fetching the transcript with language fallback; chunking the transcript into fixed-size segments; applying an abstractive summarization model to each chunk; applying a sentiment classification model to each chunk; fetching real engagement ratios from a public API; scraping related video metadata from YouTube; and rendering all outputs in a responsive dark-theme web interface with clickable timestamp navigation.
+
+6.   The method of Disclosure 5, wherein all NLP inference is performed locally using pre-trained model weights cached from the HuggingFace model hub, requiring no paid API subscriptions, no external model serving infrastructure, and no user authentication tokens of any kind.
+
+Conclusion
+This project report presents an end-to-end, AI-powered YouTube video summarization system that integrates abstractive NLP summarization, transformer-based sentiment analysis, real engagement rating retrieval, and live recommendation scraping into a single locally executable web application. The system demonstrates that meaningful video intelligence — including timestamped navigation, content sentiment context, and real-world engagement signals — can be delivered entirely through free, open-source tools without any paid API dependencies.
+
+The project’s key differentiator over existing YouTube summarization tools is its holistic integration of multiple data dimensions — textual summary, sentiment, rating, and recommendation — combined with a production-quality dark-theme user interface featuring animated visual elements, gradient effects, and clickable timestamp navigation. The dual-model NLP pipeline (DistilBART for summarization, DistilBERT for sentiment) and the two-level scraping fallback for recommendations ensure robust output across a wide variety of video types and YouTube page structures.
+
+Overall, this work illustrates how transformer-based NLP models, combined with lightweight web scraping and a thoughtfully designed user interface, can meaningfully reduce the time cost of consuming video content and improve the discoverability of related material — with no financial barrier to entry.
+
+Summary
+An AI-powered YouTube video summarizer is presented. The system accepts a YouTube URL and applies two locally-running HuggingFace transformer models — DistilBART-CNN-12-6 for abstractive summarization and DistilBERT-SST-2 for sentiment classification — to the automatically retrieved video transcript. Clickable timestamps link each summary point directly to the corresponding moment in the video. Real like/dislike ratios are fetched from a free public API and displayed as a visual rating bar. Related video recommendations are scraped from YouTube and rendered as fully clickable cards with real thumbnails. The entire system runs locally with no paid API keys and is served through a dark-theme, animated web interface built with Flask and HTML/CSS/JavaScript.
+
+Declaration by Contributors
+
+—   End of Project Report   —

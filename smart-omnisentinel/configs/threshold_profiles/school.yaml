@@ -1,0 +1,19 @@
+# configs/threshold_profiles/school.yaml
+# High-sensitivity profile for school environments.
+# Lower confidence thresholds + shorter escalation window.
+
+name: school
+description: "High sensitivity profile for school corridors and campuses"
+
+violence_confidence_min: 0.65    # More sensitive — err on side of caution
+fall_confidence_min: 0.60
+crowd_confidence_min: 0.60
+
+persistence_frames: 10            # Faster confirmation (2.5s at 4fps)
+
+risk_low_max: 20                  # Tighter LOW band
+risk_medium_max: 55               # More incidents escalate to HIGH
+
+ema_alpha: 0.40                   # Slightly more reactive
+cooldown_seconds: 180             # Shorter cooldown — school events can repeat
+escalation_timeout_seconds: 120   # Escalate faster — 2 minutes max

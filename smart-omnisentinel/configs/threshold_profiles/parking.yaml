@@ -1,0 +1,20 @@
+# configs/threshold_profiles/parking.yaml
+# Parking lot / outdoor nighttime deployment
+# Higher sensitivity for late-night incidents, longer cooldowns for false alarms.
+
+name: parking_outdoor
+description: "Outdoor / parking lot — elevated night sensitivity, longer cooldown"
+
+violence_confidence_min: 0.68       # Lower threshold — poor lighting = lower model confidence
+fall_confidence_min: 0.65
+crowd_confidence_min: 0.62
+
+persistence_frames: 10              # React slightly faster (outdoor FP are common anyway)
+
+risk_low_max: 25
+risk_medium_max: 58
+
+ema_alpha: 0.40                     # Faster response to rapid events outdoors
+
+cooldown_seconds: 420               # Longer cooldown — outdoor FP rate is higher
+escalation_timeout_seconds: 240

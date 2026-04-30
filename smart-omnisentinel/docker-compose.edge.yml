@@ -1,0 +1,43 @@
+version: "3.9"
+
+# ============================================================
+# SmartOmniSentinel — Edge Deployment (Jetson / NVR Mode)
+# Optimized for: low memory, TensorRT inference, no dashboard
+# Usage: docker compose -f docker-compose.yml -f docker-compose.edge.yml up
+# ============================================================
+
+services:
+
+  api:
+    environment:
+      INFERENCE__USE_TENSORRT: "true"
+      STORAGE__MAX_DISK_GB: "20.0"      # Conservative on edge storage
+      STORAGE__STAGING_TTL_HOURS: "1"   # Faster staging cleanup
+
+  inference_worker:
+    environment:
+      INFERENCE__DEVICE: cuda
+      INFERENCE__USE_TENSORRT: "true"
+      INFERENCE__EFFECTIVE_FPS: "3"     # Thermal headroom on Jetson
+      INFERENCE__DETECTION_SKIP_FRAMES: "5"
+    runtime: nvidia                     # NVIDIA Container Runtime required
+    deploy:
+      resources:
+        limits:
+          memory: 2G                    # Jetson memory constraint
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # No dashboard container on edge — access API directly or via remote dashboard
+  # No nginx on edge — direct API access on LAN
+
+  postgres:
+    command: >
+      postgres
+      -c shared_buffers=128MB
+      -c work_mem=4MB
+      -c maintenance_work_mem=64MB
+      -c max_connections=20

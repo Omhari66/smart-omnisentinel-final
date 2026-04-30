@@ -1,0 +1,34 @@
+# configs/settings.yaml
+# Base configuration — all values can be overridden via environment variables.
+# Secrets (passwords, keys) MUST be in .env, never in this file.
+
+app_name: SmartOmniSentinel
+app_env: development
+debug: false
+
+db:
+  pool_size: 10
+  max_overflow: 20
+  echo: false
+
+redis:
+  enabled: false   # Set true to enable Redis event bus for multi-process mode
+
+inference:
+  device: cpu                        # Override: cuda
+  detector_model: yolov8n.pt
+  pose_model: yolov8n-pose.pt
+  classifier_checkpoint: ml/checkpoints/temporal_v1.pt
+  effective_fps: 4
+  detection_skip_frames: 4
+  persistence_frames: 12
+  ema_alpha: 0.35
+  use_tensorrt: false
+
+storage:
+  evidence_root: evidence_storage
+  max_disk_gb: 50.0
+  staging_ttl_hours: 2
+
+notifications:
+  twilio_enabled: false

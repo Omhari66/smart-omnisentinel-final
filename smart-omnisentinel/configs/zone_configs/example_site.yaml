@@ -1,0 +1,49 @@
+# configs/zone_configs/example_site.yaml
+# Example zone configuration for a typical deployment site.
+# Copy and modify for your installation.
+
+zones:
+  - name: main_entrance
+    description: "Front entrance lobby"
+    sensitivity: 0.75
+    suppress_event_types: []
+    peak_hours_schedule:
+      - start: "08:00"
+        end: "09:30"
+        days: [1, 2, 3, 4, 5]  # Mon-Fri
+        note: "High foot traffic during morning peak — reduce FP sensitivity"
+
+  - name: parking_lot_north
+    description: "North parking lot — outdoor, poor lighting at night"
+    sensitivity: 0.80
+    suppress_event_types: []
+    peak_hours_schedule: []
+
+  - name: gym_sports_hall
+    description: "Indoor sports hall — high motion baseline"
+    sensitivity: 0.50
+    suppress_event_types:
+      - VIOLENT_INTERACTION   # Sports training looks like fighting
+      - CROWD_AGGRESSION      # Team warm-ups trigger crowd detector
+    peak_hours_schedule:
+      - start: "06:00"
+        end: "22:00"
+        days: [1, 2, 3, 4, 5, 6, 7]
+        note: "Gym open hours — suppress all day"
+
+  - name: server_room
+    description: "Server room — no people expected"
+    sensitivity: 0.95   # Any person detected = alert
+    suppress_event_types: []
+    peak_hours_schedule: []
+
+  - name: cafeteria
+    description: "Staff cafeteria — crowd expected at meal times"
+    sensitivity: 0.65
+    suppress_event_types:
+      - CROWD_AGGRESSION   # Crowded lines are normal
+    peak_hours_schedule:
+      - start: "12:00"
+        end: "13:30"
+        days: [1, 2, 3, 4, 5]
+        note: "Lunch rush — crowd suppression active"

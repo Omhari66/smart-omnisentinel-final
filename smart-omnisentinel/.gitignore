@@ -1,0 +1,109 @@
+# ============================================================
+# SmartOmniSentinel .gitignore
+# ============================================================
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.Python
+pip-wheel-metadata/
+.installed.cfg
+*.manifest
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+ENV/
+.env.local
+.env.*.local
+
+# --- Secrets (NEVER commit) ---
+.env
+*.key
+*.pem
+*.p12
+*.pfx
+
+# --- Database ---
+*.db
+*.sqlite
+*.sqlite3
+
+# --- ML model files (large binaries — use Git LFS or artifact storage) ---
+ml/checkpoints/*.pt
+ml/checkpoints/*.pth
+ml/checkpoints/*.onnx
+ml/checkpoints/*.trt
+ml/checkpoints/*.engine
+!ml/checkpoints/.gitkeep
+
+# --- Training data (never commit raw video or large datasets) ---
+data/
+!data/.gitkeep
+
+# --- Evidence storage (contains sensitive video clips) ---
+evidence_storage/clips/
+evidence_storage/staging/
+evidence_storage/manifests/
+!evidence_storage/.gitkeep
+
+# --- False positive log (contains incident metadata) ---
+evidence_storage/false_positives.jsonl
+
+# --- Logs ---
+*.log
+logs/
+*.out
+
+# --- Coverage and test artifacts ---
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- IDEs ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# --- Docker ---
+.dockerignore
+
+# --- Node (dashboard) ---
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.next/
+dashboard/build/
+
+# --- Alembic --- 
+# Keep migration files but exclude auto-generated
+db/migrations/versions/__pycache__/
+
+# --- Temporary files ---
+tmp/
+temp/
+*.tmp
+*.bak
+*.orig
+
+# --- Large binaries and media ---
+*.pt
+*.mp4
+*.pth
+*.onnx

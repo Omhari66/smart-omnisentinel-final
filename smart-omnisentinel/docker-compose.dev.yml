@@ -1,0 +1,55 @@
+version: "3.9"
+
+# ============================================================
+# SmartOmniSentinel — Development Override
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# Adds: hot reload, exposed ports, debug logging, SQLite option
+# ============================================================
+
+services:
+
+  api:
+    build:
+      context: .
+      dockerfile: deployments/docker/Dockerfile.api
+    volumes:
+      - .:/app                          # Mount source for hot reload
+      - evidence_storage:/app/evidence_storage
+    environment:
+      APP_ENV: development
+      DEBUG: "true"
+      DB__ECHO: "true"                  # Log all SQL statements
+    command: >
+      uvicorn api.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+      --reload-dir api
+      --reload-dir services
+      --reload-dir core
+      --log-level debug
+    ports:
+      - "8000:8000"
+      - "5678:5678"                     # debugpy port for VS Code attach
+
+  inference_worker:
+    volumes:
+      - .:/app                          # Mount source for hot reload
+      - evidence_storage:/app/evidence_storage
+      - ./ml/checkpoints:/app/ml/checkpoints
+    environment:
+      APP_ENV: development
+      DEBUG: "true"
+      INFERENCE__DEVICE: cpu
+      INFERENCE__EFFECTIVE_FPS: "2"     # Reduce FPS in dev to save CPU
+
+  postgres:
+    ports:
+      - "5432:5432"                     # Expose for direct DB access in dev
+
+  redis:
+    ports:
+      - "6379:6379"                     # Expose for redis-cli in dev
+
+volumes:
+  evidence_storage:

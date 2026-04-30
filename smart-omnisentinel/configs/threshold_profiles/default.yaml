@@ -1,0 +1,27 @@
+# configs/threshold_profiles/default.yaml
+# Default threshold profile — applied to cameras without a specific profile.
+
+name: default
+description: "Balanced thresholds for general indoor surveillance"
+
+# Per-classifier minimum smoothed confidence before event is emitted
+violence_confidence_min: 0.72
+fall_confidence_min: 0.68
+crowd_confidence_min: 0.65
+
+# Frames event must persist at or above confidence threshold
+persistence_frames: 12
+
+# Risk score tier boundaries
+risk_low_max: 29          # 0-29 → LOW
+risk_medium_max: 64       # 30-64 → MEDIUM
+                          # 65-100 → HIGH
+
+# EMA smoothing factor (higher = more reactive, lower = more stable)
+ema_alpha: 0.35
+
+# Cooldown after HIGH alert fires (seconds) — prevents alert storm
+cooldown_seconds: 300
+
+# Escalation: MEDIUM incidents auto-escalate to HIGH after this many seconds
+escalation_timeout_seconds: 300

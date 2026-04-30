@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartOmniSentinel | Security Operations Center</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* Ultra-premium dark theme inspired by enterprise security products */
+            --bg-base: #09090b;      /* Zinc 950 */
+            --bg-surface: #18181b;   /* Zinc 900 */
+            --bg-elevated: #27272a;  /* Zinc 800 */
+            --border: #3f3f46;       /* Zinc 700 */
+            
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            
+            --accent: #3b82f6;       /* Blue */
+            --accent-glow: rgba(59, 130, 246, 0.5);
+            
+            --danger: #ef4444;       /* Red */
+            --danger-glow: rgba(239, 68, 68, 0.4);
+            
+            --warning: #f59e0b;      /* Amber */
+            --success: #10b981;      /* Emerald */
+            
+            --radius-sm: 4px;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+        }
+
+        /* Status panel */
+        .status-panel { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 16px; background: var(--bg-surface); border-top: 1px solid var(--border); }
+        .status-item { text-align: center; padding: 10px; background: var(--bg-elevated); border-radius: var(--radius-md); border: 1px solid var(--border); }
+        .status-item .si-label { font-size: 10px; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 1px; margin-bottom: 4px; }
+        .status-item .si-value { font-size: 18px; font-weight: 700; color: var(--text-primary); }
+        .status-item .si-value.live { color: var(--success); }
+        
+        /* AI Settings panel */
+        .ai-settings { padding: 16px; background: var(--bg-surface); border-top: 1px solid var(--border); }
+        .ai-settings h3 { font-size: 12px; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 1px; margin-bottom: 12px; }
+        .slider-group { margin-bottom: 12px; }
+        .slider-group label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+        .slider-group input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+        .save-cfg-btn { width: 100%; padding: 8px; background: var(--accent); color: white; border: none; border-radius: var(--radius-sm); cursor: pointer; font-weight: 600; font-size: 12px; transition: background 0.2s; }
+        .save-cfg-btn:hover { background: #2563eb; }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        /* SMS Simulation Overlay */
+        .sms-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.9); z-index: 9999; flex-direction: column;
+            align-items: center; justify-content: center;
+        }
+        .sms-terminal {
+            background: #000; border: 1px solid var(--border); padding: 24px; border-radius: var(--radius-md);
+            font-family: 'Courier New', Courier, monospace; color: #10b981; width: 600px;
+            height: 300px; overflow-y: auto; font-size: 14px; box-shadow: 0 0 40px rgba(16, 185, 129, 0.1);
+            line-height: 1.6;
+        }
+
+        /* --- Header / Top Navigation --- */
+        header {
+            height: 56px;
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            justify-content: space-between;
+            z-index: 10;
+        }
+        
+        .brand { 
+            display: flex; align-items: center; gap: 12px; 
+            font-size: 15px; font-weight: 600; letter-spacing: 0.5px; 
+        }
+        .brand-icon {
+            width: 12px; height: 12px;
+            background: var(--accent);
+            border-radius: 50%;
+            box-shadow: 0 0 12px var(--accent-glow);
+        }
+
+        .header-metrics { display: flex; gap: 20px; align-items: center; }
+        .metric {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 13px; font-weight: 500; color: var(--text-secondary);
+        }
+        .metric-value { color: var(--text-primary); font-weight: 600; font-size: 14px; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .dot-red { background: var(--danger); box-shadow: 0 0 8px var(--danger-glow); }
+        .dot-yellow { background: var(--warning); }
+        .dot-green { background: var(--success); box-shadow: 0 0 8px rgba(16, 185, 129, 0.4); }
+
+        .clock { font-family: monospace; font-size: 14px; letter-spacing: 1px; color: var(--text-secondary); margin-left: 16px;}
+
+        /* --- Main Layout --- */
+        .layout { display: flex; flex: 1; overflow: hidden; }
+
+        /* --- Sidebar (Live Events) --- */
+        .sidebar {
+            width: 340px;
+            background: var(--bg-surface);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            z-index: 5;
+        }
+        
+        .sidebar-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
+            background: rgba(0,0,0,0.2);
+        }
+        .sidebar-header h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--text-secondary); }
+        
+        .live-badge {
+            display: flex; align-items: center; gap: 6px;
+            font-size: 11px; font-weight: 700; color: var(--danger); letter-spacing: 0.5px;
+        }
+        .live-badge span { width: 6px; height: 6px; background: var(--danger); border-radius: 50%; animation: pulse 2s infinite; }
+
+        .feed-container {
+            flex: 1; overflow-y: auto; padding: 16px;
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        .feed-container::-webkit-scrollbar { width: 6px; }
+        .feed-container::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        
+        .event-card {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        .event-card:hover { border-color: var(--text-secondary); transform: translateX(2px); }
+        .event-card.risk-high { border-left: 4px solid var(--danger); }
+        .event-card.risk-med { border-left: 4px solid var(--warning); }
+        .event-card.risk-low { border-left: 4px solid var(--success); }
+
+        .event-top { display: flex; justify-content: space-between; margin-bottom: 6px; align-items: center;}
+        .event-title { font-weight: 600; font-size: 13px; }
+        .event-time { font-size: 11px; color: var(--text-secondary); font-family: monospace; }
+        
+        .event-meta { display: flex; gap: 12px; font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;}
+        .meta-val { font-weight: 600; color: var(--text-primary); }
+        
+        .event-tag {
+            display: inline-block; padding: 3px 8px; border-radius: 4px;
+            font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+            background: rgba(255,255,255,0.05); color: var(--text-secondary);
+        }
+        .tag-emergency { background: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); }
+        .tag-review { background: rgba(245, 158, 11, 0.15); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.3); }
+
+        /* --- Center Console (Cameras) --- */
+        .workspace {
+            flex: 1; background: var(--bg-base);
+            padding: 24px; overflow-y: auto;
+            position: relative;
+        }
+        
+        .camera-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            gap: 24px;
+        }
+
+        .camera-view {
+            background: #000;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            aspect-ratio: 16/9;
+        }
+        
+        /* The video element filling the card */
+        .camera-video {
+            width: 100%; height: 100%; object-fit: cover;
+        }
+
+        /* Overlay UI inside the camera feed */
+        .camera-osd {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none;
+            padding: 16px;
+            display: flex; flex-direction: column; justify-content: space-between;
+        }
+        .osd-top { display: flex; justify-content: space-between; align-items: flex-start; }
+        
+        .cam-label {
+            background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+            padding: 6px 12px; border-radius: var(--radius-sm);
+            font-size: 13px; font-weight: 500; border: 1px solid rgba(255,255,255,0.1);
+            display: inline-flex; align-items: center; gap: 8px;
+        }
+        
+        .osd-bottom { display: flex; justify-content: space-between; align-items: flex-end; }
+        .cam-stats { font-family: monospace; font-size: 11px; color: rgba(255,255,255,0.7); text-shadow: 0 1px 2px #000; }
+
+        /* Offline camera styling */
+        .cam-offline { background: repeating-linear-gradient(45deg, #111, #111 10px, #18181b 10px, #18181b 20px); display: flex; justify-content: center; align-items: center; }
+        .offline-text { background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: var(--radius-sm); color: var(--text-secondary); font-weight: 500; font-size: 13px; border: 1px solid var(--border); }
+
+        /* --- Incident Review Modal --- */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8); backdrop-filter: blur(5px);
+            display: none; justify-content: center; align-items: center; z-index: 100;
+        }
+        .modal-window {
+            background: var(--bg-surface);
+            width: 900px; max-width: 95%;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7);
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+        
+        .modal-header {
+            padding: 20px 24px; border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .modal-title { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 12px; }
+        .close-btn { background: none; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer; transition: color 0.2s;}
+        .close-btn:hover { color: #fff; }
+
+        .modal-body {
+            display: grid; grid-template-columns: 2fr 1fr;
+        }
+        
+        .modal-video-area { background: #000; padding: 24px; border-right: 1px solid var(--border); }
+        .modal-video-wrapper { aspect-ratio: 16/9; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border); position: relative; }
+        .modal-video-wrapper video { width: 100%; height: 100%; object-fit: cover; }
+        
+        .modal-info-area { padding: 24px; background: var(--bg-base); }
+        .info-block { margin-bottom: 24px; }
+        .info-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); margin-bottom: 6px; }
+        .info-value { font-size: 15px; font-weight: 500; }
+        
+        .score-display { display: flex; align-items: center; gap: 16px; }
+        .score-circle { width: 50px; height: 50px; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 18px; font-weight: 700; border: 3px solid var(--border); }
+        .score-high-val { border-color: var(--danger); color: var(--danger); box-shadow: inset 0 0 10px var(--danger-glow); }
+
+        .modal-footer {
+            padding: 20px 24px; border-top: 1px solid var(--border); background: var(--bg-surface);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        
+        .btn-group { display: flex; gap: 12px; }
+        .btn {
+            padding: 10px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600;
+            cursor: pointer; border: none; transition: all 0.2s; letter-spacing: 0.5px;
+        }
+        .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+        .btn:active { transform: translateY(0); }
+        
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-primary); }
+        .btn-outline:hover { background: rgba(255,255,255,0.05); }
+        .btn-confirm { background: var(--success); color: #fff; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2); }
+        .btn-escalate { background: var(--danger); color: #fff; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2); }
+
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="brand">
+            <div class="brand-icon"></div>
+            SmartOmniSentinel <span style="color: var(--text-secondary); font-weight: 400;">| Security Operations Center</span>
+        </div>
+        <div class="header-metrics">
+            <div class="metric">
+                <div class="status-dot dot-red"></div>
+                Emergencies: <span class="metric-value" id="stat-emerg">0</span>
+            </div>
+            <div class="metric">
+                <div class="status-dot dot-yellow"></div>
+                Pending: <span class="metric-value" id="stat-review">0</span>
+            </div>
+            <div class="metric">
+                <div class="status-dot dot-green"></div>
+                Cameras Online: <span class="metric-value" id="stat-cams">0</span>
+            </div>
+            <div class="clock" id="clock">00:00:00</div>
+            <div id="ws-status" style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary);margin-left:16px;padding:4px 10px;border-radius:20px;border:1px solid var(--border);background:var(--bg-elevated);transition:all 0.3s;">
+                <span id="ws-dot" style="width:8px;height:8px;border-radius:50%;background:var(--text-secondary);display:inline-block;animation:pulse 2s infinite;"></span>
+                <span id="ws-label">Connecting...</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="layout">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">Navigation</div>
+            <div class="nav-links" style="padding: 16px; display: flex; flex-direction: column; gap: 8px;">
+                <a href="index.html" class="nav-item active" style="padding: 12px 16px; border-radius: 6px; color: var(--accent); text-decoration: none; font-weight: 500; display: flex; align-items: center; gap: 10px; background-color: rgba(59, 130, 246, 0.15); border-left: 3px solid var(--accent);">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                    Live Dashboard
+                </a>
+                <a href="analytics.html" class="nav-item" style="padding: 12px 16px; border-radius: 6px; color: var(--text-secondary); text-decoration: none; font-weight: 500; display: flex; align-items: center; gap: 10px; transition: all 0.2s;">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                    Analytics & Reporting
+                </a>
+            </div>
+
+            <div class="sidebar-header" style="border-top: 1px solid var(--border);">
+                <h2>Event Log</h2>
+                <div class="live-badge"><span></span> RECORDING</div>
+            </div>
+            <div class="feed-container" id="alerts-container">
+                <!-- Events injected here -->
+                <div style="text-align: center; color: var(--text-secondary); margin-top: 20px; font-size: 13px;">Connecting to Event Bus...</div>
+            </div>
+        </div>
+
+        <!-- Main Workspace -->
+        <div class="workspace">
+            <div class="camera-grid" id="cameras-container">
+                
+                <!-- Main Camera with Video Loop -->
+                <div class="camera-view">
+                    <!-- ADD feed.mp4 TO DASHBOARD FOLDER TO PLAY THIS -->
+                    <video src="feed.mp4" autoplay loop muted class="camera-video" onerror="this.style.display='none'; document.getElementById('vid-error').style.display='flex';"></video>
+                    
+                    <!-- Fallback if video is missing -->
+                    <div id="vid-error" class="camera-osd cam-offline" style="display:none; justify-content: center; align-items: center; background: #000;">
+                        <div class="offline-text" style="color: var(--danger); border-color: var(--danger);">Missing 'feed.mp4' in dashboard folder</div>
+                    </div>
+
+                    <div class="camera-osd">
+                        <div class="osd-top">
+                            <div class="cam-label">
+                                <div class="status-dot dot-green"></div>
+                                CAM-01: Main Entrance
+                            </div>
+                            <div class="event-tag tag-emergency" style="background: rgba(0,0,0,0.8); border:none;">REC</div>
+                        </div>
+                        <div class="osd-bottom">
+                            <div class="cam-stats">H.264 | 1920x1080 | 60 FPS</div>
+                            <div class="cam-stats">AI ENGINE: ACTIVE</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Secondary Camera (Laptop Webcam) -->
+                <div class="camera-view">
+                    <video id="laptop-webcam" autoplay muted playsinline class="camera-video"></video>
+                    <div class="camera-osd">
+                        <div class="osd-top">
+                            <div class="cam-label">
+                                <div class="status-dot dot-green"></div>
+                                CAM-02: Parking Lot B
+                            </div>
+                            <div class="event-tag tag-emergency" style="background: rgba(0,0,0,0.8); border:none;">REC</div>
+                        </div>
+                        <div class="osd-bottom">
+                            <div class="cam-stats">WebRTC | 1280x720 | 30 FPS</div>
+                            <div class="cam-stats">AI ENGINE: ACTIVE</div>
+                        </div>
+                    </div>
+                </div>
+
+                 <!-- Tertiary Camera (Offline Simulation) -->
+                 <div class="camera-view cam-offline">
+                    <div class="camera-osd">
+                        <div class="osd-top">
+                            <div class="cam-label">
+                                <div class="status-dot dot-red"></div>
+                                CAM-03: Stairwell C3
+                            </div>
+                        </div>
+                    </div>
+                    <div class="offline-text">OFFLINE</div>
+                </div>
+
+            </div>
+
+            <!-- Live System Status Panel -->
+            <div class="status-panel" id="status-panel">
+                <div class="status-item">
+                    <div class="si-label">Uptime</div>
+                    <div class="si-value" id="sys-uptime">--</div>
+                </div>
+                <div class="status-item">
+                    <div class="si-label">Active Cameras</div>
+                    <div class="si-value live" id="sys-cameras">--</div>
+                </div>
+                <div class="status-item">
+                    <div class="si-label">Total Incidents</div>
+                    <div class="si-value" id="sys-total">--</div>
+                </div>
+                <div class="status-item">
+                    <div class="si-label">Inference</div>
+                    <div class="si-value live" id="sys-device">--</div>
+                </div>
+            </div>
+
+            <!-- AI Settings Panel -->
+            <div class="ai-settings">
+                <h3>AI Detection Settings</h3>
+                <div class="slider-group">
+                    <label>Violence Threshold <span id="thresh-val">0.60</span></label>
+                    <input type="range" id="thresh-slider" min="0" max="100" value="60" oninput="document.getElementById('thresh-val').innerText = (this.value / 100).toFixed(2)">
+                </div>
+                <div class="slider-group">
+                    <label>Persistence Frames <span id="persist-val">12</span></label>
+                    <input type="range" id="persist-slider" min="1" max="30" value="12" oninput="document.getElementById('persist-val').innerText = this.value">
+                </div>
+                <div class="slider-group">
+                    <label>Cooldown (seconds) <span id="cooldown-val">5.0</span></label>
+                    <input type="range" id="cooldown-slider" min="0" max="30" value="5" oninput="document.getElementById('cooldown-val').innerText = this.value + '.0'">
+                </div>
+                <button class="save-cfg-btn" onclick="saveConfig()">Apply Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Incident Review Modal -->
+    <div class="modal-overlay" id="detail-pane">
+        <div class="modal-window">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <div class="status-dot dot-yellow" id="det-dot"></div>
+                    <span id="det-title">Incident Review</span>
+                    <span id="det-locked-badge" style="display:none; margin-left: 12px; background: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid var(--danger); padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; letter-spacing: 1px;">🔒 EVIDENCE LOCKED</span>
+                </div>
+                <button class="close-btn" onclick="closeDetail()">&times;</button>
+            </div>
+            
+            <div class="modal-body">
+                <div class="modal-video-area">
+                    <div class="modal-video-wrapper">
+                        <!-- Actual Evidence Snapshot -->
+                        <video id="evidence-video" style="width: 100%; height: 100%; object-fit: cover; display: none;" controls autoplay muted loop></video>
+                        <img id="evidence-img" src="evidence.jpg" style="width: 100%; height: 100%; object-fit: cover;" alt="Evidence Snapshot" onerror="this.onerror=null; this.style.display='none';"/>
+                        <div style="position:absolute; top:10px; left:10px; background:rgba(0,0,0,0.8); padding:4px 8px; font-size:11px; font-family:monospace; color:#fff; border-radius:4px;" id="evidence-tag">EVIDENCE_SNAPSHOT.JPG</div>
+                    </div>
+                </div>
+                <div class="modal-info-area">
+                    <div class="info-block">
+                        <div class="info-label">Detection Time</div>
+                        <div class="info-value" id="det-time">-</div>
+                    </div>
+                    
+                    <div class="info-block">
+                        <div class="info-label">Threat Level</div>
+                        <div class="score-display">
+                            <div class="score-circle score-high-val" id="det-score">-</div>
+                            <div>
+                                <div style="font-weight: 600;" id="det-status">Pending Review</div>
+                                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">AI Confidence: <span class="meta-val" id="det-conf">-</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="info-block">
+                        <div class="info-label">System Metadata</div>
+                        <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
+                            <div>Model: Temporal_v1.pt</div>
+                            <div>Pipeline: Pose + GRU Sliding Window</div>
+                            <div>People Detected: <span id="det-people" class="meta-val">-</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="updateIncident('FALSE_POSITIVE')">Mark False Positive</button>
+                <div class="btn-group">
+                    <button class="btn btn-outline" onclick="updateIncident('DISMISS')">Dismiss Event</button>
+                    <button class="btn btn-confirm" onclick="updateIncident('CONFIRM')">Confirm Incident</button>
+                    <button class="btn btn-escalate" onclick="simulateEscalation()">ESCALATE TO GUARD</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SMS Overlay -->
+    <div class="sms-overlay" id="sms-overlay">
+        <h2 style="color: white; margin-bottom: 20px; font-weight: 300; letter-spacing: 2px;">SECURE DISPATCH TERMINAL</h2>
+        <div class="sms-terminal" id="sms-terminal"></div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000/api/v1';
+        const WS_URL  = 'ws://localhost:8000/api/v1/ws/events';
+        let authToken = null;
+        let currentIncidentId = null;
+        let lastIncidentCount = 0;
+        let _wsSocket = null;
+        let _wsReconnectTimer = null;
+
+        // Clock — this is the only setInterval we keep
+        setInterval(() => { document.getElementById('clock').innerText = new Date().toLocaleTimeString('en-US', { hour12: false }); }, 1000);
+
+        // ── WebSocket Status Badge ───────────────────────────────────────────
+        function setWsStatus(state) {
+            const dot   = document.getElementById('ws-dot');
+            const label = document.getElementById('ws-label');
+            const badge = document.getElementById('ws-status');
+            if (state === 'live') {
+                dot.style.background   = 'var(--success)';
+                label.innerText        = 'LIVE';
+                badge.style.borderColor = 'rgba(16,185,129,0.4)';
+            } else {
+                dot.style.background   = 'var(--warning)';
+                label.innerText        = 'Reconnecting...';
+                badge.style.borderColor = 'rgba(245,158,11,0.4)';
+            }
+        }
+
+        // ── WebSocket Client ─────────────────────────────────────────────────
+        function connectWebSocket() {
+            if (!authToken) return;
+            if (_wsReconnectTimer) { clearTimeout(_wsReconnectTimer); _wsReconnectTimer = null; }
+
+            const socket = new WebSocket(`${WS_URL}?token=${authToken}`);
+            _wsSocket = socket;
+
+            socket.onopen = () => {
+                console.log('[WS] Connected to SmartOmniSentinel event bus');
+                setWsStatus('live');
+            };
+
+            socket.onmessage = (e) => {
+                let msg;
+                try { msg = JSON.parse(e.data); } catch { return; }
+
+                const type    = msg.event_type;
+                const payload = msg.payload || {};
+
+                if (type === 'PING') {
+                    // Respond to keepalive
+                    socket.send(JSON.stringify({ event_type: 'PONG' }));
+
+                } else if (type === 'INCIDENT_CREATED') {
+                    // Instantly add the new incident to the list with a flash animation
+                    playAlertBeep();
+                    prependIncidentCard(payload);
+                    lastIncidentCount++;
+
+                } else if (type === 'EVIDENCE_READY') {
+                    // If the detail pane is open for this incident, upgrade the player
+                    if (currentIncidentId === String(payload.incident_id)) {
+                        openDetail(currentIncidentId);
+                    }
+
+                } else if (type === 'ALERT_SEVERITY_CHANGED') {
+                    // Refresh the list to reflect the new severity
+                    fetchIncidents();
+
+                } else if (type === 'CAMERA_STATUS_CHANGED') {
+                    const count = payload.new_status === 'ONLINE' ? 1 : 0;
+                    document.getElementById('stat-cams').innerText = count;
+
+                } else if (type === 'INCIDENT_RESOLVED') {
+                    // Remove the resolved card instantly from the list
+                    const card = document.getElementById(`card-${payload.incident_id}`);
+                    if (card) { card.style.opacity = '0'; card.style.transition = 'opacity 0.4s'; setTimeout(() => card.remove(), 400); }
+
+                } else if (type === 'CONNECTED') {
+                    // Initial snapshot — sync stats
+                    if (payload.active_incidents !== undefined) {
+                        document.getElementById('stat-emerg').innerText = payload.active_incidents;
+                    }
+                }
+            };
+
+            socket.onclose = () => {
+                console.warn('[WS] Disconnected. Reconnecting in 3s...');
+                setWsStatus('reconnecting');
+                _wsReconnectTimer = setTimeout(connectWebSocket, 3000);
+            };
+
+            socket.onerror = (err) => {
+                console.error('[WS] Error:', err);
+                socket.close();
+            };
+        }
+
+        // ── Prepend a new incident card without a full re-render ─────────────
+        function prependIncidentCard(inc) {
+            const container = document.getElementById('alerts-container');
+            let riskClass = 'risk-low';
+            if (inc.risk_score >= 65) riskClass = 'risk-high';
+            else if (inc.risk_score >= 30) riskClass = 'risk-med';
+            const tagClass = (inc.severity === 'HIGH' || inc.severity === 'CRITICAL') ? 'tag-emergency' : 'tag-review';
+            const timeStr  = new Date(inc.detected_at).toLocaleTimeString('en-US', { hour12: false });
+            const newCard  = document.createElement('div');
+            newCard.id     = `card-${inc.incident_id}`;
+            newCard.className = `event-card ${riskClass}`;
+            newCard.style.cssText = 'opacity:0;transform:translateY(-10px);transition:all 0.4s;';
+            newCard.onclick = () => openDetail(String(inc.incident_id));
+            newCard.innerHTML = `
+                <div class="event-top">
+                    <div class="event-title">${inc.event_type.replace('_', ' ')} <span style="background:var(--danger);color:#fff;padding:2px 6px;border-radius:4px;font-size:9px;margin-left:8px;animation:pulse 1s infinite;">NEW</span></div>
+                    <div class="event-time">${timeStr}</div>
+                </div>
+                <div class="event-meta">
+                    <span>Risk <span class="meta-val">${inc.risk_score}</span></span>
+                    <span>Conf <span class="meta-val">${(inc.confidence * 100).toFixed(0)}%</span></span>
+                </div>
+                <div class="event-tag ${tagClass}">${inc.severity}</div>`;
+            container.prepend(newCard);
+            requestAnimationFrame(() => { newCard.style.opacity='1'; newCard.style.transform='translateY(0)'; });
+
+            // Update header counters
+            const emerg = document.querySelectorAll('.event-card.risk-high').length;
+            const review = document.querySelectorAll('.tag-review').length;
+            document.getElementById('stat-emerg').innerText = emerg;
+            document.getElementById('stat-review').innerText = review;
+        }
+
+        // ── Alert Beep ───────────────────────────────────────────────────────
+        function playAlertBeep() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                osc.type = 'sine'; osc.frequency.setValueAtTime(880, ctx.currentTime);
+                osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.12);
+            } catch(e) {}
+        }
+
+        // ── Connect Laptop Webcam ────────────────────────────────────────────
+        async function connectLaptopWebcam() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                const videoEl = document.getElementById('laptop-webcam');
+                if (videoEl) {
+                    videoEl.srcObject = stream;
+                }
+            } catch (err) {
+                console.error("Failed to access laptop webcam:", err);
+            }
+        }
+
+        async function init() {
+            try {
+                const res = await fetch(`${API_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: 'admin@demo.com', password: 'Admin123!' })
+                });
+                
+                if (!res.ok) throw new Error('API disconnected');
+                const data = await res.json();
+                authToken = data.access_token;
+
+                // Do one-time initial load via REST, then switch to WebSocket
+                await fetchIncidents();
+                await fetchSystemStatus();
+                await loadConfig();
+
+                // Start the WebSocket connection — replaces all setInterval polling
+                connectWebSocket();
+                
+                // Start webcam for CAM-02
+                connectLaptopWebcam();
+
+            } catch (err) {
+                console.error(err);
+                document.getElementById('alerts-container').innerHTML = 
+                    `<div style="padding: 20px; color: var(--danger); text-align: center; border: 1px solid var(--danger); border-radius: 8px; background: rgba(239, 68, 68, 0.1);">
+                        Cannot connect to API server.<br><br>Ensure uvicorn is running on port 8000.
+                    </div>`;
+            }
+        }
+
+        async function fetchIncidents() {
+            try {
+                const res = await fetch(`${API_URL}/incidents?page_size=30`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                const data = await res.json();
+                
+                let emerg = 0, review = 0;
+                const container = document.getElementById('alerts-container');
+                let html = '';
+                
+                data.items.forEach((inc, index) => {
+                    if (inc.status === 'EMERGENCY') emerg++;
+                    if (inc.status === 'PENDING_REVIEW' || inc.status === 'ACTIVE_REVIEW') review++;
+
+                    const timeStr = new Date(inc.detected_at).toLocaleTimeString('en-US', {hour12: false});
+                    
+                    let riskClass = 'risk-low';
+                    if (inc.risk_score >= 65) riskClass = 'risk-high';
+                    else if (inc.risk_score >= 30) riskClass = 'risk-med';
+
+                    let tagClass = 'tag-review';
+                    if (inc.status === 'EMERGENCY') tagClass = 'tag-emergency';
+
+                    // Highlight the very first (newest) incident
+                    const isNew = index === 0 ? '<span style="background:var(--danger); color:#fff; padding:2px 6px; border-radius:4px; font-size:9px; margin-left:8px; animation: pulse 1s infinite;">NEW</span>' : '';
+
+                    html += `
+                        <div class="event-card ${riskClass}" onclick="openDetail('${inc.id}')">
+                            <div class="event-top">
+                                <div class="event-title">${inc.event_type.replace('_', ' ')} ${isNew}</div>
+                                <div class="event-time">${timeStr}</div>
+                            </div>
+                            <div class="event-meta">
+                                <span>Risk <span class="meta-val">${inc.risk_score}</span></span>
+                                <span>Conf <span class="meta-val">${(inc.confidence_at_alert * 100).toFixed(0)}%</span></span>
+                            </div>
+                            <div class="event-tag ${tagClass}">${inc.status.replace('_', ' ')}</div>
+                        </div>
+                    `;
+                });
+                
+                document.getElementById('stat-emerg').innerText = emerg;
+                document.getElementById('stat-review').innerText = review;
+                document.getElementById('stat-cams').innerText = '1'; // Hardcoded for aesthetics
+                
+                if (data.total > lastIncidentCount && lastIncidentCount > 0) {
+                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    const osc = ctx.createOscillator();
+                    osc.type = 'sine'; osc.frequency.setValueAtTime(880, ctx.currentTime);
+                    osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.1);
+                }
+                lastIncidentCount = data.total;
+
+                if (container.innerHTML !== html) container.innerHTML = html;
+                
+            } catch (err) { console.error('Failed to fetch incidents', err); }
+        }
+
+        async function openDetail(id) {
+            currentIncidentId = id;
+            document.getElementById('detail-pane').style.display = 'flex';
+            
+            // Fetch the specific snapshot for this incident from the backend API
+            const evImg = document.getElementById('evidence-img');
+            const evVid = document.getElementById('evidence-video');
+            const evTag = document.getElementById('evidence-tag');
+            
+            if (evImg && evVid) {
+                // Try to load the video clip
+                const videoUrl = `${API_URL}/evidence/clips/incident/${id}?t=${Date.now()}`;
+                fetch(videoUrl, { method: 'HEAD', headers: { 'Authorization': `Bearer ${authToken}` } })
+                .then(res => {
+                    if (res.ok) {
+                        // Video exists! Show video, hide image
+                        evImg.style.display = 'none';
+                        evVid.style.display = 'block';
+                        evVid.src = videoUrl;
+                        if(evTag) evTag.innerText = 'EVIDENCE_CLIP.MP4';
+                    } else {
+                        // Video not ready yet, show snapshot image
+                        evVid.style.display = 'none';
+                        evVid.src = '';
+                        evImg.style.display = 'block';
+                        evImg.src = `${API_URL}/evidence/snapshots/${id}?t=` + new Date().getTime();
+                        if(evTag) evTag.innerText = 'EVIDENCE_SNAPSHOT.JPG';
+                    }
+                })
+                .catch(() => {
+                    evVid.style.display = 'none';
+                    evImg.style.display = 'block';
+                    evImg.src = `${API_URL}/evidence/snapshots/${id}?t=` + new Date().getTime();
+                    if(evTag) evTag.innerText = 'EVIDENCE_SNAPSHOT.JPG';
+                });
+            }
+            
+            try {
+                const res = await fetch(`${API_URL}/incidents/${id}`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                const inc = await res.json();
+                
+                document.getElementById('det-title').innerText = `${inc.event_type.replace('_', ' ')}`;
+                document.getElementById('det-time').innerText = new Date(inc.detected_at).toLocaleString();
+                
+                const scoreCircle = document.getElementById('det-score');
+                scoreCircle.innerText = inc.risk_score;
+                scoreCircle.className = `score-circle ${inc.risk_score >= 65 ? 'score-high-val' : ''}`;
+                scoreCircle.style.borderColor = inc.risk_score >= 65 ? 'var(--danger)' : (inc.risk_score >= 30 ? 'var(--warning)' : 'var(--success)');
+                scoreCircle.style.color = scoreCircle.style.borderColor;
+
+                document.getElementById('det-conf').innerText = `${(inc.confidence_at_alert * 100).toFixed(1)}%`;
+                document.getElementById('det-people').innerText = inc.people_count;
+                
+                const statusEl = document.getElementById('det-status');
+                statusEl.innerText = inc.status.replace('_', ' ');
+                statusEl.style.color = inc.status === 'EMERGENCY' ? 'var(--danger)' : (inc.status.includes('REVIEW') ? 'var(--warning)' : 'var(--text-primary)');
+                
+                document.getElementById('det-locked-badge').style.display = (inc.status === 'EMERGENCY' || inc.risk_score >= 65) ? 'inline-block' : 'none';
+
+            } catch (err) { console.error(err); }
+        }
+
+        function closeDetail() {
+            document.getElementById('detail-pane').style.display = 'none';
+            currentIncidentId = null;
+        }
+
+        async function updateIncident(action) {
+            if (!currentIncidentId) return;
+            try {
+                await fetch(`${API_URL}/review/${currentIncidentId}/action`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+                    body: JSON.stringify({ action: action, notes: "Operator review" })
+                });
+                closeDetail();
+                fetchIncidents();
+            } catch (err) { alert("Review failed."); }
+        }
+
+        async function simulateEscalation() {
+            const overlay = document.getElementById('sms-overlay');
+            const terminal = document.getElementById('sms-terminal');
+            overlay.style.display = 'flex';
+            terminal.innerHTML = '';
+            
+            const lines = [
+                "> [SYSTEM] Initiating emergency protocol...",
+                "> [API] Updating incident status in database...",
+                "> [SMS] Sending alert to Campus Security (555-0199)...",
+                "> <span style='color:var(--success)'>[SMS] SUCCESS: Message delivered.</span>",
+                "> <span style='color:var(--success)'>[SYSTEM] Escalation complete. Resolving alert.</span>"
+            ];
+            
+            for (let i = 0; i < lines.length; i++) {
+                setTimeout(() => {
+                    terminal.innerHTML += lines[i] + '<br>';
+                    // Play subtle terminal beep
+                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    const osc = ctx.createOscillator();
+                    osc.type = 'square'; osc.frequency.setValueAtTime(1200 + (i*100), ctx.currentTime);
+                    osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.05);
+                    
+                    if (i === lines.length - 1) {
+                        setTimeout(() => {
+                            overlay.style.display = 'none';
+                            updateIncident('ESCALATE');
+                        }, 1200);
+                    }
+                }, i * 600);
+            }
+        }
+
+        // ── System Status ────────────────────────────────────────────
+        async function fetchSystemStatus() {
+            try {
+                const res = await fetch(`${API_URL}/status`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                const s = await res.json();
+                
+                // Format uptime
+                const hrs = Math.floor(s.uptime_seconds / 3600);
+                const mins = Math.floor((s.uptime_seconds % 3600) / 60);
+                document.getElementById('sys-uptime').innerText = `${hrs}h ${mins}m`;
+                document.getElementById('sys-cameras').innerText = s.active_cameras;
+                document.getElementById('sys-total').innerText = s.total_incidents;
+                document.getElementById('sys-device').innerText = s.inference_device.toUpperCase();
+            } catch (e) { console.warn('Status fetch failed', e); }
+        }
+
+        // ── Runtime Config ────────────────────────────────────────────
+        async function loadConfig() {
+            try {
+                const res = await fetch(`${API_URL}/config/inference`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                const cfg = await res.json();
+                
+                document.getElementById('thresh-slider').value = Math.round(cfg.threshold * 100);
+                document.getElementById('thresh-val').innerText = cfg.threshold.toFixed(2);
+                document.getElementById('persist-slider').value = cfg.persistence_frames;
+                document.getElementById('persist-val').innerText = cfg.persistence_frames;
+                document.getElementById('cooldown-slider').value = cfg.cooldown_seconds;
+                document.getElementById('cooldown-val').innerText = cfg.cooldown_seconds.toFixed(1);
+            } catch (e) { console.warn('Config load failed', e); }
+        }
+
+        async function saveConfig() {
+            try {
+                const body = {
+                    threshold: parseInt(document.getElementById('thresh-slider').value) / 100,
+                    persistence_frames: parseInt(document.getElementById('persist-slider').value),
+                    cooldown_seconds: parseFloat(document.getElementById('cooldown-slider').value)
+                };
+                const res = await fetch(`${API_URL}/config/inference`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+                    body: JSON.stringify(body)
+                });
+                if (res.ok) {
+                    const btn = document.querySelector('.save-cfg-btn');
+                    btn.innerText = '✓ Applied!';
+                    btn.style.background = 'var(--success)';
+                    setTimeout(() => { btn.innerText = 'Apply Settings'; btn.style.background = ''; }, 2000);
+                }
+            } catch (e) { alert('Failed to save config'); }
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>

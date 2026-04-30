@@ -1,0 +1,41 @@
+# ============================================================
+# Dockerfile.inference — Inference service (GPU-capable)
+# Use NVIDIA CUDA base image for GPU deployments.
+# For CPU-only, change base to python:3.11-slim.
+# ============================================================
+FROM python:3.11-slim
+
+# For CUDA support, swap above line with:
+# FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    ffmpeg \
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# For CUDA builds, install GPU versions:
+# RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+# RUN pip install onnxruntime-gpu
+
+COPY . .
+
+RUN mkdir -p ml/checkpoints evidence_storage/staging
+
+RUN useradd -m -u 1000 sentinel && chown -R sentinel:sentinel /app
+USER sentinel
+
+# Inference worker entry point
+CMD ["python", "-m", "services.ingestion.camera_registry"]

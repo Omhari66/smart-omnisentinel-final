@@ -1,0 +1,232 @@
+{
+  "source": "your_video.mp4",
+  "camera_id": "test",
+  "frames_processed": 66,
+  "elapsed_seconds": 45.02,
+  "timestamp": "2026-04-24T23:36:20.438667",
+  "events": [
+    {
+      "camera_id": "test",
+      "event_type": "CROWD_AGGRESSION",
+      "raw_confidence": 0.6702470302581787,
+      "people_count": 5,
+      "track_ids": [
+        1,
+        2,
+        5,
+        7,
+        8
+      ],
+      "frame_number": 8,
+      "timestamp": 1777073758.2849355,
+      "class_probs": {},
+      "motion_magnitude": 4.404940605163574
+    },
+    {
+      "camera_id": "test",
+      "event_type": "CROWD_AGGRESSION",
+      "raw_confidence": 0.6464995265007019,
+      "people_count": 5,
+      "track_ids": [
+        1,
+        2,
+        7,
+        8,
+        5
+      ],
+      "frame_number": 12,
+      "timestamp": 1777073759.7616377,
+      "class_probs": {},
+      "motion_magnitude": 3.929990530014038
+    },
+    {
+      "camera_id": "test",
+      "event_type": "CROWD_AGGRESSION",
+      "raw_confidence": 0.6451660156250001,
+      "people_count": 4,
+      "track_ids": [
+        1,
+        13,
+        14,
+        5
+      ],
+      "frame_number": 16,
+      "timestamp": 1777073761.2116745,
+      "class_probs": {},
+      "motion_magnitude": 4.9033203125
+    },
+    {
+      "camera_id": "test",
+      "event_type": "CROWD_AGGRESSION",
+      "raw_confidence": 0.6304154872894288,
+      "people_count": 5,
+      "track_ids": [
+        1,
+        2,
+        16,
+        3,
+        11
+      ],
+      "frame_number": 20,
+      "timestamp": 1777073762.7876308,
+      "class_probs": {},
+      "motion_magnitude": 3.608309745788574
+    },
+    {
+      "camera_id": "test",
+      "event_type": "CROWD_AGGRESSION",
+      "raw_confidence": 0.7446513295173645,
+      "people_count": 7,
+      "track_ids": [
+        1,
+        2,
+        16,
+        3,
+        17,
+        13,
+        18
+      ],
+      "frame_number": 28,
+      "timestamp": 1777073765.9485197,
+      "class_probs": {},
+      "motion_magnitude": 3.89302659034729
+    },
+    {
+      "camera_id": "test",
+      "event_type": "CROWD_AGGRESSION",
+      "raw_confidence": 0.7999917507171632,
+      "people_count": 7,
+      "track_ids": [
+        1,
+        2,
+        17,
+        13,
+        14,
+        16,
+        22
+      ],
+      "frame_number": 32,
+      "timestamp": 1777073767.4547977,
+      "class_probs": {},
+      "motion_magnitude": 4.999835014343262
+    },
+    {
+      "camera_id": "test",
+      "event_type": "CROWD_AGGRESSION",
+      "raw_confidence": 0.6434309124946594,
+      "people_count": 5,
+      "track_ids": [
+        14,
+        22,
+        13,
+        24,
+        21
+      ],
+      "frame_number": 36,
+      "timestamp": 1777073768.9504576,
+      "class_probs": {},
+      "motion_magnitude": 3.8686182498931885
+    },
+    {
+      "camera_id": "test",
+      "event_type": "CROWD_AGGRESSION",
+      "raw_confidence": 0.6165765285491944,
+      "people_count": 4,
+      "track_ids": [
+        14,
+        25,
+        29,
+        21
+      ],
+      "frame_number": 44,
+      "timestamp": 1777073771.912099,
+      "class_probs": {},
+      "motion_magnitude": 4.331530570983887
+    },
+    {
+      "camera_id": "test",
+      "event_type": "CROWD_AGGRESSION",
+      "raw_confidence": 0.6043976306915284,
+      "people_count": 4,
+      "track_ids": [
+        14,
+        21,
+        33,
+        34
+      ],
+      "frame_number": 48,
+      "timestamp": 1777073773.372413,
+      "class_probs": {},
+      "motion_magnitude": 4.087952613830566
+    },
+    {
+      "camera_id": "test",
+      "event_type": "CROWD_AGGRESSION",
+      "raw_confidence": 0.64074147939682,
+      "people_count": 5,
+      "track_ids": [
+        17,
+        37,
+        24,
+        13,
+        14
+      ],
+      "frame_number": 52,
+      "timestamp": 1777073774.8139882,
+      "class_probs": {},
+      "motion_magnitude": 3.8148295879364014
+    },
+    {
+      "camera_id": "test",
+      "event_type": "CROWD_AGGRESSION",
+      "raw_confidence": 0.7083219289779663,
+      "people_count": 6,
+      "track_ids": [
+        13,
+        14,
+        29,
+        33,
+        36,
+        24
+      ],
+      "frame_number": 56,
+      "timestamp": 1777073776.3388014,
+      "class_probs": {},
+      "motion_magnitude": 4.166438579559326
+    },
+    {
+      "camera_id": "test",
+      "event_type": "CROWD_AGGRESSION",
+      "raw_confidence": 0.6003813028335572,
+      "people_count": 4,
+      "track_ids": [
+        13,
+        29,
+        21,
+        24
+      ],
+      "frame_number": 60,
+      "timestamp": 1777073777.8691363,
+      "class_probs": {},
+      "motion_magnitude": 4.007626056671143
+    },
+    {
+      "camera_id": "test",
+      "event_type": "CROWD_AGGRESSION",
+      "raw_confidence": 0.7197529792785644,
+      "people_count": 6,
+      "track_ids": [
+        13,
+        21,
+        41,
+        29,
+        38,
+        43
+      ],
+      "frame_number": 64,
+      "timestamp": 1777073779.361284,
+      "class_probs": {},
+      "motion_magnitude": 4.395059585571289
+    }
+  ]
+}
