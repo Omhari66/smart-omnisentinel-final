@@ -1,0 +1,68 @@
+# ============================================================
+# .dockerignore — SmartOmniSentinel
+# Excludes files from Docker build context to keep images lean
+# and prevent secrets from leaking into the image layer cache.
+# ============================================================
+
+# Python virtual environment (never copy into image)
+.venv/
+venv/
+env/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyx
+
+# Git
+.git/
+.gitignore
+
+# Secrets — never bake into image
+.env
+*.env
+
+# Model weights (mount as volume or download at runtime)
+*.pt
+*.onnx
+*.engine
+ml/checkpoints/
+
+# Binary / media test files
+*.db
+*.mp4
+*.avi
+*.mkv
+dashboard/feed.mp4
+dashboard/cam_laptop.jpg
+your_video.mp4
+
+# Docs and reports (not needed at runtime)
+docs/
+*.docx
+*.pdf
+*.txt
+report_format.txt
+verification_report.txt
+verify_project.py
+
+# Dev scripts (not needed in production image)
+scripts/
+Start_Project.bat
+
+# Test suite (not needed in production image)
+tests/
+
+# IDE / OS files
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# Logs and temp
+*.log
+logs/
+tmp/
+temp/

@@ -38,4 +38,4 @@ RUN useradd -m -u 1000 sentinel && chown -R sentinel:sentinel /app
 USER sentinel
 
 # Inference worker entry point
-CMD ["python", "-m", "services.ingestion.camera_registry"]
+CMD ["python", "-m", "services.ingestion"]

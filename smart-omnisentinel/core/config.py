@@ -13,7 +13,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import List
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -37,8 +37,8 @@ class JWTSettings(BaseSettings):
 
 class InferenceSettings(BaseSettings):
     device: str = "cpu"                  # "cpu" | "cuda"
-    detector_model: str = "yolov8n.pt"
-    pose_model: str = "yolov8n-pose.pt"
+    detector_model: str = "ml/checkpoints/yolov8n.pt"
+    pose_model: str = "ml/checkpoints/yolov8n-pose.pt"
     classifier_checkpoint: str = "ml/checkpoints/temporal_v1.pt"
     effective_fps: int = 4               # Effective sampling rate after frame skip
     detection_skip_frames: int = 4       # Run detector every Nth frame
@@ -110,6 +110,25 @@ class Settings(BaseSettings):
         if v not in allowed:
             raise ValueError(f"app_env must be one of {allowed}")
         return v
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> "Settings":
+        """
+        Fail fast at startup if insecure defaults are used in production.
+        This prevents accidentally deploying with the placeholder SECRET_KEY.
+        """
+        _INSECURE_PREFIXES = ("CHANGE-ME", "change-me", "your-secret")
+        if self.app_env == "production":
+            if any(self.secret_key.startswith(p) for p in _INSECURE_PREFIXES):
+                raise ValueError(
+                    "SECRET_KEY must be set to a secure random value in production. "
+                    "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+                )
+            if any(self.signed_url.secret.startswith(p) for p in _INSECURE_PREFIXES):
+                raise ValueError(
+                    "SIGNED_URL__SECRET must be set to a secure random value in production."
+                )
+        return self
 
     @property
     def is_production(self) -> bool:

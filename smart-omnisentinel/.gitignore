@@ -83,7 +83,10 @@ htmlcov/
 Thumbs.db
 
 # --- Docker ---
-.dockerignore
+# Note: .dockerignore SHOULD be committed (it's not secret)
+
+# --- Evidence storage runtime files (never commit) ---
+evidence_storage/snapshots/
 
 # --- Node (dashboard) ---
 dashboard/node_modules/

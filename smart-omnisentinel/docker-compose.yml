@@ -11,7 +11,7 @@ x-common-env: &common-env
   environment:
     DB__URL: postgresql+asyncpg://sentinel:${POSTGRES_PASSWORD:-sentinel_dev}@postgres:5432/sentinel
     REDIS__URL: redis://redis:6379/0
-    REDIS__ENABLED: "false"   # Set "true" to enable Redis-backed event bus
+    REDIS__ENABLED: "true"   # Must be true in production for cross-container event bus
 
 services:
 
@@ -81,8 +81,13 @@ services:
     volumes:
       - evidence_storage:/app/evidence_storage
       - ./ml/checkpoints:/app/ml/checkpoints:ro
+      # Model weights must be placed in ml/checkpoints/ before first run:
+      # cp yolov8n.pt ml/checkpoints/yolov8n.pt
+      # cp yolov8n-pose.pt ml/checkpoints/yolov8n-pose.pt
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     # Uncomment to enable GPU:
     # deploy:
