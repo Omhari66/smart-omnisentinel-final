@@ -10,8 +10,7 @@
 #   2. Pushes to GitHub Container Registry (ghcr.io)
 #   3. Tags with: latest, git-sha, and semver version
 #
-# Prerequisites (set these in GitHub → Settings → Secrets):
-#   No extra secrets needed — uses GITHUB_TOKEN automatically.
+# No extra secrets needed — uses GITHUB_TOKEN automatically.
 #
 # Image URLs after push:
 #   ghcr.io/<your-github-username>/smartomnisentinel-api:latest
@@ -35,9 +34,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  # Automatically uses your GitHub username from the repo context
-  API_IMAGE: ghcr.io/${{ github.repository_owner }}/smartomnisentinel-api
-  INFERENCE_IMAGE: ghcr.io/${{ github.repository_owner }}/smartomnisentinel-inference
 
 jobs:
   build-and-publish:
@@ -51,21 +47,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Extract version metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ${{ env.API_IMAGE }}
-            ${{ env.INFERENCE_IMAGE }}
-          tags: |
-            # Version tag from git tag (v1.0.0 → 1.0.0)
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            # Short SHA for traceability
-            type=sha,prefix=sha-,format=short
-            # latest on main tag pushes
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+      # ── CRITICAL: GHCR requires ALL LOWERCASE image names ─────────────────
+      # github.repository_owner preserves original case (e.g. "Omhari66")
+      # but ghcr.io rejects uppercase — we must normalize here.
+      - name: Normalize image names to lowercase
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "API_IMAGE=ghcr.io/${OWNER}/smartomnisentinel-api" >> $GITHUB_ENV
+          echo "INFERENCE_IMAGE=ghcr.io/${OWNER}/smartomnisentinel-inference" >> $GITHUB_ENV
+          echo "Resolved API image:       ghcr.io/${OWNER}/smartomnisentinel-api"
+          echo "Resolved Inference image: ghcr.io/${OWNER}/smartomnisentinel-inference"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -77,6 +68,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # ── Extract version tag ───────────────────────────────────────────────
+      - name: Get version tag
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION="${{ github.ref_name }}"          # e.g. v1.0.0
+            SEMVER="${VERSION#v}"                       # e.g. 1.0.0
+          else
+            SEMVER="dev-${{ github.sha }}"
+          fi
+          echo "VERSION=${VERSION:-dev}" >> $GITHUB_OUTPUT
+          echo "SEMVER=${SEMVER}" >> $GITHUB_OUTPUT
+
       # ── Build & Push API image ────────────────────────────────────────────
       - name: Build and push API image
         uses: docker/build-push-action@v5
@@ -84,13 +88,17 @@ jobs:
           context: smart-omnisentinel
           file: smart-omnisentinel/deployments/docker/Dockerfile.api
           push: ${{ startsWith(github.ref, 'refs/tags/') || github.event.inputs.push_to_registry == 'true' }}
-          tags: ${{ env.API_IMAGE }}:${{ github.sha }},${{ env.API_IMAGE }}:latest
-          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false        # Avoid attestation issues on new GHCR packages
+          tags: |
+            ${{ env.API_IMAGE }}:latest
+            ${{ env.API_IMAGE }}:${{ steps.version.outputs.SEMVER }}
+            ${{ env.API_IMAGE }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.SEMVER }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
-            GIT_SHA=${{ github.sha }}
 
       # ── Build & Push Inference Worker image ──────────────────────────────
       - name: Build and push Inference Worker image
@@ -99,17 +107,25 @@ jobs:
           context: smart-omnisentinel
           file: smart-omnisentinel/deployments/docker/Dockerfile.inference
           push: ${{ startsWith(github.ref, 'refs/tags/') || github.event.inputs.push_to_registry == 'true' }}
-          tags: ${{ env.INFERENCE_IMAGE }}:${{ github.sha }},${{ env.INFERENCE_IMAGE }}:latest
-          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false        # Avoid attestation issues on new GHCR packages
+          tags: |
+            ${{ env.INFERENCE_IMAGE }}:latest
+            ${{ env.INFERENCE_IMAGE }}:${{ steps.version.outputs.SEMVER }}
+            ${{ env.INFERENCE_IMAGE }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.SEMVER }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # ── Print image digest for traceability ──────────────────────────────
+      # ── Summary ───────────────────────────────────────────────────────────
       - name: Print image summaries
         run: |
-          echo "=== Images Built ==="
-          echo "API:       ${{ env.API_IMAGE }}:${{ github.sha }}"
-          echo "Inference: ${{ env.INFERENCE_IMAGE }}:${{ github.sha }}"
-          echo "Tag:       ${{ github.ref_name }}"
+          echo "=== Images Built & Pushed ==="
+          echo "API:       ${{ env.API_IMAGE }}:${{ steps.version.outputs.SEMVER }}"
+          echo "Inference: ${{ env.INFERENCE_IMAGE }}:${{ steps.version.outputs.SEMVER }}"
+          echo "SHA tag:   ${{ env.API_IMAGE }}:sha-${{ github.sha }}"
           echo ""
-          echo "To deploy, update docker-compose.yml image: tags to use these digests."
+          echo "Pull with:"
+          echo "  docker pull ${{ env.API_IMAGE }}:latest"
