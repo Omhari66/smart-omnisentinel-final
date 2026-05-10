@@ -4,7 +4,6 @@ tests/conftest.py
 Shared pytest fixtures and configuration.
 """
 
-import asyncio
 import os
 import sys
 
@@ -12,14 +11,6 @@ import pytest
 
 # Make project root importable
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """Use a single event loop for all async tests in the session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
 
 
 @pytest.fixture(autouse=True)

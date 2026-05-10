@@ -49,24 +49,35 @@ class TestFallDetectorGeometric:
         assert result.geometric_triggered is False
 
     def test_fallen_person_triggers_after_transition(self):
-        detector = FallDetector()
+        """
+        Patch get_models() at its source module so the classifier path returns
+        0.0 (fall_classifier=None), letting geometric rules alone decide.
+        No real ML models needed for this test.
+        """
+        from unittest.mock import MagicMock, patch
 
-        # First: simulate standing frames to set was_standing=True
-        standing_pose = make_pose(
-            bbox=[100, 100, 200, 400],  # aspect=3.0 (standing)
-            head_y=0.1,
-        )
-        for _ in range(12):
-            detector.detect(standing_pose)
+        mock_models = MagicMock()
+        mock_models.fall_classifier = None   # Classifier not loaded → geometric only
 
-        # Then: simulate fallen (horizontal bounding box)
-        fallen_pose = make_pose(
-            bbox=[50, 200, 350, 280],   # width 300, height 80 → aspect ~0.27
-            head_y=0.5,
-        )
-        result = None
-        for _ in range(5):
-            result = detector.detect(fallen_pose)
+        with patch("services.inference.model_loader.get_models", return_value=mock_models):
+            detector = FallDetector()
+
+            # First: simulate standing frames so was_standing=True
+            standing_pose = make_pose(
+                bbox=[100, 100, 200, 400],  # height/width = 3.0 → standing
+                head_y=0.1,
+            )
+            for _ in range(12):
+                detector.detect(standing_pose)
+
+            # Then: simulate fallen (horizontal bounding box)
+            fallen_pose = make_pose(
+                bbox=[50, 200, 350, 280],   # width=300, height=80 → aspect≈0.27
+                head_y=0.5,
+            )
+            result = None
+            for _ in range(5):
+                result = detector.detect(fallen_pose)
 
         assert result is not None
         assert result.geometric_triggered is True

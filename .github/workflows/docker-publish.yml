@@ -1,0 +1,115 @@
+# ============================================================
+# .github/workflows/docker-publish.yml
+# SmartOmniSentinel — Build & Publish Docker Images
+#
+# Triggers ONLY on version tags (v1.0.0, v1.2.3, etc.)
+# or manual workflow_dispatch (for staging deploys).
+#
+# What it does:
+#   1. Builds API + Inference Docker images
+#   2. Pushes to GitHub Container Registry (ghcr.io)
+#   3. Tags with: latest, git-sha, and semver version
+#
+# Prerequisites (set these in GitHub → Settings → Secrets):
+#   No extra secrets needed — uses GITHUB_TOKEN automatically.
+#
+# Image URLs after push:
+#   ghcr.io/<your-github-username>/smartomnisentinel-api:latest
+#   ghcr.io/<your-github-username>/smartomnisentinel-inference:latest
+# ============================================================
+
+name: Build & Publish Docker Images
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"   # Matches v1.0.0, v2.1.3, etc.
+  workflow_dispatch:
+    inputs:
+      push_to_registry:
+        description: "Push images to GHCR?"
+        required: true
+        default: "false"
+        type: choice
+        options: ["true", "false"]
+
+env:
+  REGISTRY: ghcr.io
+  # Automatically uses your GitHub username from the repo context
+  API_IMAGE: ghcr.io/${{ github.repository_owner }}/smartomnisentinel-api
+  INFERENCE_IMAGE: ghcr.io/${{ github.repository_owner }}/smartomnisentinel-inference
+
+jobs:
+  build-and-publish:
+    name: Build & Publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write       # Required to push to GHCR
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.API_IMAGE }}
+            ${{ env.INFERENCE_IMAGE }}
+          tags: |
+            # Version tag from git tag (v1.0.0 → 1.0.0)
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            # Short SHA for traceability
+            type=sha,prefix=sha-,format=short
+            # latest on main tag pushes
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Build & Push API image ────────────────────────────────────────────
+      - name: Build and push API image
+        uses: docker/build-push-action@v5
+        with:
+          context: smart-omnisentinel
+          file: smart-omnisentinel/deployments/docker/Dockerfile.api
+          push: ${{ startsWith(github.ref, 'refs/tags/') || github.event.inputs.push_to_registry == 'true' }}
+          tags: ${{ env.API_IMAGE }}:${{ github.sha }},${{ env.API_IMAGE }}:latest
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            GIT_SHA=${{ github.sha }}
+
+      # ── Build & Push Inference Worker image ──────────────────────────────
+      - name: Build and push Inference Worker image
+        uses: docker/build-push-action@v5
+        with:
+          context: smart-omnisentinel
+          file: smart-omnisentinel/deployments/docker/Dockerfile.inference
+          push: ${{ startsWith(github.ref, 'refs/tags/') || github.event.inputs.push_to_registry == 'true' }}
+          tags: ${{ env.INFERENCE_IMAGE }}:${{ github.sha }},${{ env.INFERENCE_IMAGE }}:latest
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── Print image digest for traceability ──────────────────────────────
+      - name: Print image summaries
+        run: |
+          echo "=== Images Built ==="
+          echo "API:       ${{ env.API_IMAGE }}:${{ github.sha }}"
+          echo "Inference: ${{ env.INFERENCE_IMAGE }}:${{ github.sha }}"
+          echo "Tag:       ${{ github.ref_name }}"
+          echo ""
+          echo "To deploy, update docker-compose.yml image: tags to use these digests."
