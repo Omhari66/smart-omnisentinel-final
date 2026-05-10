@@ -77,6 +77,18 @@ class SignedURLSettings(BaseSettings):
     expiry_seconds: int = 900
 
 
+class ObservabilitySettings(BaseSettings):
+    # Sentry — set OBSERVABILITY__SENTRY_DSN in .env to enable error tracking.
+    # Leave empty to disable (safe default — no data sent to Sentry).
+    sentry_dsn: str = ""
+    sentry_traces_sample_rate: float = 0.1   # 10% of transactions traced
+    sentry_profiles_sample_rate: float = 0.1  # 10% of transactions profiled
+
+    # Prometheus metrics — exposes /metrics endpoint via instrumentator.
+    # In production, restrict this path in nginx to internal IPs only.
+    prometheus_enabled: bool = True
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -102,6 +114,7 @@ class Settings(BaseSettings):
     storage: StorageSettings = Field(default_factory=StorageSettings)
     notifications: NotificationSettings = Field(default_factory=NotificationSettings)
     signed_url: SignedURLSettings = Field(default_factory=SignedURLSettings)
+    observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
 
     @field_validator("app_env")
     @classmethod

@@ -27,6 +27,79 @@ from db.session import close_engine, get_session_factory
 
 
 # ---------------------------------------------------------------------------
+# Observability helpers
+# ---------------------------------------------------------------------------
+
+def _init_sentry(settings) -> None:
+    """
+    Initialise Sentry SDK if a DSN is configured.
+    Safe to call in dev — an empty DSN is a no-op.
+    """
+    if not settings.observability.sentry_dsn:
+        return
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+
+        sentry_sdk.init(
+            dsn=settings.observability.sentry_dsn,
+            environment=settings.app_env,
+            release="smartomnisentinel@1.0.0",
+            traces_sample_rate=settings.observability.sentry_traces_sample_rate,
+            profiles_sample_rate=settings.observability.sentry_profiles_sample_rate,
+            integrations=[
+                FastApiIntegration(transaction_style="endpoint"),
+                SqlalchemyIntegration(),
+            ],
+            # Don't send PII (IP addresses, user emails) to Sentry
+            send_default_pii=False,
+        )
+        get_logger(__name__).info("sentry_initialized", env=settings.app_env)
+    except ImportError:
+        get_logger(__name__).warning(
+            "sentry_sdk_not_installed",
+            hint="pip install sentry-sdk[fastapi]",
+        )
+
+
+def _init_prometheus(app: FastAPI, settings) -> None:
+    """
+    Mount the Prometheus /metrics endpoint using prometheus-fastapi-instrumentator.
+    Records: request count, request latency (p50/p95/p99), request size,
+             response size, and HTTP status code breakdowns per endpoint.
+    """
+    if not settings.observability.prometheus_enabled:
+        return
+    try:
+        from prometheus_fastapi_instrumentator import Instrumentator
+
+        Instrumentator(
+            should_group_status_codes=True,     # Group 2xx, 4xx, 5xx
+            should_ignore_untemplated=True,      # Skip unmapped paths (e.g. favicon)
+            should_respect_env_var=False,
+            should_instrument_requests_inprogress=True,
+            excluded_handlers=[
+                "/api/v1/health/ping",           # Skip liveness probe from metrics
+                "/metrics",                      # Skip metrics scrapes themselves
+            ],
+            inprogress_name="http_requests_inprogress",
+            inprogress_labels=True,
+        ).instrument(app).expose(
+            app,
+            endpoint="/metrics",
+            include_in_schema=False,             # Hide from Swagger UI
+            tags=["observability"],
+        )
+        get_logger(__name__).info("prometheus_metrics_enabled", endpoint="/metrics")
+    except ImportError:
+        get_logger(__name__).warning(
+            "prometheus_fastapi_instrumentator_not_installed",
+            hint="pip install prometheus-fastapi-instrumentator",
+        )
+
+
+# ---------------------------------------------------------------------------
 # Lifecycle: startup → yield → shutdown
 # Modern lifespan pattern (replaces deprecated @app.on_event decorator).
 # ---------------------------------------------------------------------------
@@ -44,6 +117,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # ── Startup ──────────────────────────────────────────────────────────────
     logger.info("sentinel_starting", environment=settings.app_env)
+
+    # Initialise Sentry error tracking (no-op if DSN not configured)
+    _init_sentry(settings)
 
     # Warm up DB connection pool — fail fast if DB is unreachable
     factory = get_session_factory()
@@ -88,7 +164,7 @@ def create_app() -> FastAPI:
             "for CCTV Networks"
         ),
         version="1.0.0",
-        lifespan=lifespan,                          # ← modern pattern, no deprecation warnings
+        lifespan=lifespan,
         docs_url="/docs" if not settings.is_production else None,
         redoc_url="/redoc" if not settings.is_production else None,
         openapi_url="/openapi.json" if not settings.is_production else None,
@@ -98,7 +174,11 @@ def create_app() -> FastAPI:
     register_middleware(app)
     register_exception_handlers(app)
 
-    # API versioned prefix
+    # ── Prometheus metrics (/metrics endpoint) ─────────────────────────────
+    # Must be set up BEFORE routers so the instrumentator wraps all routes.
+    _init_prometheus(app, settings)
+
+    # ── API versioned prefix ────────────────────────────────────────────────
     API_PREFIX = "/api/v1"
 
     # Routers

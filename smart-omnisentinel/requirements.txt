@@ -38,6 +38,10 @@ structlog==24.2.0
 pydantic==2.7.3
 python-dateutil==2.9.0.post0
 aiofiles==23.2.1
+
+# Observability
+prometheus-fastapi-instrumentator==7.0.0
+sentry-sdk[fastapi]==2.5.1
 pillow==10.3.0
 
 # Dev / test

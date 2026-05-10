@@ -112,9 +112,51 @@ services:
     depends_on:
       - api
 
+  # ---- Prometheus (metrics scraper) ----------------------------------------
+  # Scrapes /metrics from the API every 15s.
+  # Access Prometheus UI: http://localhost:9090  (dev only — not exposed in prod)
+
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    restart: unless-stopped
+    volumes:
+      - ./deployments/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"   # Keep 15 days of metrics
+      - "--web.enable-lifecycle"               # Allow hot-reload via POST /-/reload
+    ports:
+      - "9090:9090"   # Dev only — remove in production or restrict via firewall
+    depends_on:
+      - api
+
+  # ---- Grafana (metrics dashboards) ----------------------------------------
+  # Pre-configured to use Prometheus as a data source.
+  # Access Grafana UI: http://localhost:3001  (admin / admin on first login)
+
+  grafana:
+    image: grafana/grafana:10.4.3
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: "admin"          # Change in production!
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"      # Disable Grafana telemetry
+      GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s:3001"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deployments/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3001:3000"   # Dev only — restrict in production
+    depends_on:
+      - prometheus
+
 volumes:
   postgres_data:
   evidence_storage:
+  prometheus_data:
+  grafana_data:
 
 networks:
   default:
