@@ -85,6 +85,11 @@ Thumbs.db
 # --- Docker ---
 # Note: .dockerignore SHOULD be committed (it's not secret)
 
+# --- TLS certificates (private keys must NEVER be committed) ---
+deployments/nginx/certs/*.key
+deployments/nginx/certs/*.crt
+deployments/nginx/certs/*.pem
+
 # --- Evidence storage runtime files (never commit) ---
 evidence_storage/snapshots/
 
