@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,16 +19,19 @@ from api.schemas.auth import (
 )
 from core.config import Settings
 from core.constants import UserRole
+from core.logger import get_logger
 from core.security import (
     create_access_token,
     create_refresh_token,
     decode_token,
     hash_password,
+    revoke_token,
     verify_password,
 )
 from db.models.user import User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = get_logger(__name__)
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -109,6 +112,58 @@ async def refresh_token(
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: CurrentUser):
     return current_user
+
+
+@router.post("/logout", status_code=204)
+async def logout(current_user: CurrentUser, request: Request):
+    """
+    Revoke the current user's access token.
+    After this call, the token is added to the Redis blocklist and subsequent
+    requests with the same token will receive 401 Unauthorized.
+    Returns 204 No Content (no body — standard for logout).
+    """
+    from datetime import timezone
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.removeprefix("Bearer ").strip()
+    if token:
+        try:
+            payload = decode_token(token)
+            jti = payload.get("jti")
+            exp = payload.get("exp")
+            if jti and exp:
+                from datetime import datetime
+                expires_at = datetime.fromtimestamp(exp, tz=timezone.utc)
+                await revoke_token(jti, expires_at)
+        except Exception:
+            pass  # Already expired or invalid — nothing to revoke
+    return None
+
+
+@router.post("/revoke", status_code=204)
+async def revoke_any_token(
+    body: dict,
+    current_user: CurrentUser,
+):
+    """
+    Admin-only: revoke a specific token by its jti.
+    Use this to force-logout a compromised account without changing the secret key.
+
+    Body: { "jti": "<uuid>", "exp": <unix_timestamp> }
+    """
+    from datetime import datetime, timezone
+
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin role required.")
+
+    jti = body.get("jti")
+    exp = body.get("exp")
+    if not jti or not exp:
+        raise HTTPException(status_code=422, detail="jti and exp are required.")
+
+    expires_at = datetime.fromtimestamp(float(exp), tz=timezone.utc)
+    await revoke_token(str(jti), expires_at)
+    logger.info("admin_token_revoked", jti=jti, by=str(current_user.id))
+    return None
 
 
 @router.post("/users", response_model=UserResponse, status_code=201)
