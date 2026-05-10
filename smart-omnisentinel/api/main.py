@@ -9,7 +9,10 @@ Entry point for uvicorn:  uvicorn api.main:app --reload
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
 
+import sqlalchemy
 from fastapi import FastAPI
 
 from api.middleware import register_exception_handlers, register_middleware
@@ -23,10 +26,60 @@ from core.logger import get_logger, setup_logging
 from db.session import close_engine, get_session_factory
 
 
-def create_app() -> FastAPI:
+# ---------------------------------------------------------------------------
+# Lifecycle: startup → yield → shutdown
+# Modern lifespan pattern (replaces deprecated @app.on_event decorator).
+# ---------------------------------------------------------------------------
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """
+    Single async context manager that handles both startup and shutdown.
+    Everything before `yield` runs on startup; everything after runs on shutdown.
+    FastAPI guarantees the shutdown block runs even if startup raises.
+    """
     settings = get_settings()
     setup_logging()
     logger = get_logger(__name__)
+
+    # ── Startup ──────────────────────────────────────────────────────────────
+    logger.info("sentinel_starting", environment=settings.app_env)
+
+    # Warm up DB connection pool — fail fast if DB is unreachable
+    factory = get_session_factory()
+    async with factory() as db:
+        await db.execute(sqlalchemy.text("SELECT 1"))
+    logger.info("db_pool_warmed")
+
+    # Initialize event bus (Redis-backed in production, asyncio.Queue in dev)
+    bus = get_event_bus()
+    logger.info("event_bus_initialized", type=type(bus).__name__)
+
+    # In development, background workers run in-process.
+    # In production they run as separate Docker containers (inference_worker service).
+    if settings.app_env == "development":
+        await _start_background_workers(app)
+
+    logger.info("sentinel_ready")
+
+    yield  # ── Application is running ─────────────────────────────────────
+
+    # ── Shutdown ─────────────────────────────────────────────────────────────
+    logger.info("sentinel_shutting_down")
+
+    # Gracefully cancel any in-process background tasks (dev mode only)
+    tasks: list[asyncio.Task] = getattr(app.state, "background_tasks", [])
+    for task in tasks:
+        task.cancel()
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    await close_engine()
+    logger.info("sentinel_stopped")
+
+
+def create_app() -> FastAPI:
+    settings = get_settings()
 
     app = FastAPI(
         title="SmartOmniSentinel",
@@ -35,6 +88,7 @@ def create_app() -> FastAPI:
             "for CCTV Networks"
         ),
         version="1.0.0",
+        lifespan=lifespan,                          # ← modern pattern, no deprecation warnings
         docs_url="/docs" if not settings.is_production else None,
         redoc_url="/redoc" if not settings.is_production else None,
         openapi_url="/openapi.json" if not settings.is_production else None,
@@ -61,45 +115,6 @@ def create_app() -> FastAPI:
     app.include_router(config_api_router.router, prefix=API_PREFIX)
     app.include_router(status_router.router, prefix=API_PREFIX)
 
-    # ---------------------------------------------------------------------------
-    # Lifecycle: startup
-    # ---------------------------------------------------------------------------
-
-    @app.on_event("startup")
-    async def on_startup() -> None:
-        logger.info("sentinel_starting", environment=settings.app_env)
-
-        # Warm up DB connection pool
-        factory = get_session_factory()
-        async with factory() as db:
-            await db.execute(__import__("sqlalchemy").text("SELECT 1"))
-        logger.info("db_pool_warmed")
-
-        # Initialize event bus (no-op for in-process bus)
-        bus = get_event_bus()
-        logger.info("event_bus_initialized", type=type(bus).__name__)
-
-        # Start background workers if running in unified mode
-        # In production: these run as separate Docker services
-        if settings.app_env == "development":
-            await _start_background_workers(app)
-
-        logger.info("sentinel_ready")
-
-    @app.on_event("shutdown")
-    async def on_shutdown() -> None:
-        logger.info("sentinel_shutting_down")
-
-        # Cancel background tasks
-        tasks = getattr(app.state, "background_tasks", [])
-        for task in tasks:
-            task.cancel()
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-
-        await close_engine()
-        logger.info("sentinel_stopped")
-
     return app
 
 
@@ -109,11 +124,10 @@ async def _start_background_workers(app: FastAPI) -> None:
     within the same process.  In production, each service runs in its
     own container and this function is never called.
     """
-    from core.logger import get_logger as _gl
-    logger = _gl(__name__)
+    logger = get_logger(__name__)
     logger.info("starting_background_workers_dev_mode")
 
-    tasks = []
+    tasks: list[asyncio.Task] = []
 
     # Alert escalation timer — checks for MEDIUM incidents past deadline
     from services.alert_manager.escalation_timer import EscalationTimer
