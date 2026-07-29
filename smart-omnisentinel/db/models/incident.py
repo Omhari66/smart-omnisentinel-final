@@ -95,7 +95,9 @@ class Incident(UUIDMixin, TimestampMixin, Base):
     is_locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     retention_days: Mapped[int] = mapped_column(SmallInteger, default=3, nullable=False)
 
-    # Relationships
+    # AI-generated summary (populated by local LLM after detection)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     camera: Mapped["Camera"] = relationship("Camera", back_populates="incidents")
     alerts: Mapped[List["Alert"]] = relationship(
         "Alert", back_populates="incident", lazy="select"

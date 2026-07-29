@@ -29,11 +29,14 @@ class NotificationService:
         camera_name = incident.camera.name if incident.camera else "Unknown Camera"
         location = incident.camera.location if incident.camera else "Unknown Location"
         
+        ai_summary = f"\nAI Summary: {incident.notes}\n" if incident.notes else ""
+        
         message = (
             f"🚨 EMERGENCY ALERT: {incident.event_type}\n"
             f"Location: {camera_name} ({location})\n"
             f"Risk Score: {incident.risk_score}/100\n"
             f"Time: {incident.detected_at.strftime('%H:%M:%S')} UTC\n"
+            f"{ai_summary}"
             f"Action Required: Immediate Review."
         )
 

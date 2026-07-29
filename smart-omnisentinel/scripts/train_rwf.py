@@ -37,8 +37,36 @@ class RWFDataset(Dataset):
             for f in glob.glob(str(nonfight_dir / "*.avi")) + glob.glob(str(nonfight_dir / "*.mp4")):
                 self.video_paths.append(f)
                 self.labels.append(0)
-                
-        print(f"Loaded {len(self.video_paths)} videos for {split} split.")
+
+        # ── Production Feedback Loop ──────────────────────────────────────────
+        # These folders are auto-populated by the SmartOmniSentinel review pipeline.
+        # Every time a guard marks an incident as "False Positive" or "Confirmed Fight",
+        # the clip is automatically copied here. The model learns from real deployment data.
+        production_root = Path(__file__).parent.parent / "ml_training"
+
+        false_positive_dir = production_root / "false_positives"
+        confirmed_fights_dir = production_root / "confirmed_fights"
+
+        fp_count = 0
+        if false_positive_dir.exists():
+            for f in glob.glob(str(false_positive_dir / "*.mp4")):
+                self.video_paths.append(f)
+                self.labels.append(0)   # NonFight
+                fp_count += 1
+
+        cf_count = 0
+        if confirmed_fights_dir.exists():
+            for f in glob.glob(str(confirmed_fights_dir / "*.mp4")):
+                self.video_paths.append(f)
+                self.labels.append(1)   # Fight
+                cf_count += 1
+
+        if fp_count or cf_count:
+            print(f"  [Production Feedback] +{fp_count} false positives (NonFight), +{cf_count} confirmed fights (Fight)")
+        else:
+            print(f"  [Production Feedback] No production clips yet in ml_training/ — using base dataset only.")
+
+        print(f"Loaded {len(self.video_paths)} videos total for {split} split.")
 
     def __len__(self):
         return len(self.video_paths)

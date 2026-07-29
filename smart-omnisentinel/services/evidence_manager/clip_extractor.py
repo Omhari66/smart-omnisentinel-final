@@ -178,7 +178,8 @@ def _write_frames_to_video(
         return False
 
     h, w = frames[0].frame.shape[:2]
-    fourcc = cv2.VideoWriter_fourcc(*"avc1")
+    # Changed from 'avc1' to 'mp4v' to prevent the missing Cisco OpenH264 DLL error on Windows
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     writer = cv2.VideoWriter(output_path, fourcc, fps, (w, h))
 
     if not writer.isOpened():

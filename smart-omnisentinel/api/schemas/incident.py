@@ -54,6 +54,7 @@ class IncidentResponse(OrmBase):
     duration_seconds: Optional[float]
     is_locked: bool
     retention_days: int
+    notes: Optional[str] = None          # LLM-generated AI summary
     review_action: Optional[ReviewAction]
     reviewed_at: Optional[datetime]
     reviewer: Optional[UserSummary]

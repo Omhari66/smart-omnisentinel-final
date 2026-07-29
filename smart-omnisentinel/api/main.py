@@ -5,15 +5,16 @@ FastAPI application factory.
 Registers all routers, middleware, exception handlers, and lifecycle events.
 Entry point for uvicorn:  uvicorn api.main:app --reload
 """
-
 from __future__ import annotations
 
+import json
+import os
 import asyncio
-from contextlib import asynccontextmanager
-from typing import AsyncIterator
-
 import sqlalchemy
-from fastapi import FastAPI
+from typing import AsyncIterator
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from api.middleware import register_exception_handlers, register_middleware
 from api.routes import alerts, auth, cameras, evidence, health, incidents, review, ws

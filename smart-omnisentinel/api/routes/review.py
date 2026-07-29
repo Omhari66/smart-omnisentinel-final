@@ -8,21 +8,23 @@ All actions are logged to the audit trail.
 
 from __future__ import annotations
 
+import glob
+import shutil
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from api.dependencies import CurrentUser, DBSession, Pagination, require_role
+from api.dependencies import DBSession, Pagination, require_role
 from api.schemas.common import PaginatedResponse
 from api.schemas.review import ReviewActionRequest, ReviewActionResponse, ReviewQueueItem
 from core.constants import (
     IncidentStatus,
     ReviewAction,
-    Severity,
     UserRole,
     WSEventType,
 )
@@ -34,6 +36,47 @@ from db.models.user import User
 
 router = APIRouter(prefix="/review", tags=["review"])
 logger = get_logger(__name__)
+
+
+# ── ML Training Export Helper ──────────────────────────────────────────────────
+ML_FALSE_POSITIVE_DIR = Path("ml_training/false_positives")
+ML_CONFIRMED_DIR      = Path("ml_training/confirmed_fights")
+CLIP_DIR              = Path("evidence_storage/clips")
+
+def _export_clip_to_ml(incident: Incident, dest_dir: Path, label: str) -> None:
+    """
+    Copies the evidence clip for this incident into the ML training folder.
+    Called as a background task after a review action.
+    """
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    clip_pattern = str(CLIP_DIR / f"{str(incident.id)}_*.mp4")
+    matches = glob.glob(clip_pattern)
+
+    if not matches:
+        logger.warning(f"[ML EXPORT] No clip found for incident {incident.id} — skipping.")
+        return
+
+    src_path = sorted(matches)[-1]
+    filename = Path(src_path).name
+    dest_path = dest_dir / filename
+
+    if dest_path.exists():
+        logger.info(f"[ML EXPORT] Clip already exported: {dest_path}")
+        return
+
+    shutil.copy2(src_path, dest_path)
+    logger.info(f"[ML EXPORT] ✅ Copied clip to {label}: {dest_path}")
+
+    # Update a simple counter README in the folder
+    readme = dest_dir / "README.md"
+    existing = [f for f in dest_dir.glob("*.mp4")]
+    with open(readme, "w") as f:
+        f.write(f"# ML Training — {label}\n")
+        f.write(f"Auto-populated by SmartOmniSentinel review pipeline.\n\n")
+        f.write(f"**Total clips:** {len(existing)}\n")
+        f.write(f"**Last updated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+
 
 
 @router.get("/queue", response_model=List[ReviewQueueItem])
@@ -125,7 +168,20 @@ async def submit_review_action(
     # Lock evidence on CONFIRM or ESCALATE
     if body.action in (ReviewAction.CONFIRM, ReviewAction.ESCALATE):
         incident.is_locked = True
-        
+
+    # ── ML Training Export ───────────────────────────────────────────────────
+    # FALSE_POSITIVE → copy to ml_training/false_positives/ (NonFight samples)
+    if body.action == ReviewAction.FALSE_POSITIVE:
+        background_tasks.add_task(
+            _export_clip_to_ml, incident, ML_FALSE_POSITIVE_DIR, "False Positives (NonFight)"
+        )
+
+    # CONFIRM / ESCALATE → copy to ml_training/confirmed_fights/ (Fight samples)
+    if body.action in (ReviewAction.CONFIRM, ReviewAction.ESCALATE):
+        background_tasks.add_task(
+            _export_clip_to_ml, incident, ML_CONFIRMED_DIR, "Confirmed Fights"
+        )
+
     # Dispatch real-world SMS/Email alerts on ESCALATE
     if body.action == ReviewAction.ESCALATE:
         from services.alert_manager.notifier import NotificationService
