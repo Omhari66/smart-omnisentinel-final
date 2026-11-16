@@ -1,6 +1,8 @@
 @echo off
 cd /d "%~dp0"
 set OLLAMA_MODELS=%~dp0models\ollama
+
+
 color 0A
 title SmartOmniSentinel Project Launcher
 
@@ -9,10 +11,10 @@ echo         SMART OMNI SENTINEL - PROJECT LAUNCHER
 echo ========================================================
 echo.
 echo Starting FastAPI Backend Server (Port 8000)...
-start "SmartOmniSentinel Backend" cmd /c "uvicorn api.main:app --host 0.0.0.0 --port 8000"
+start "SmartOmniSentinel Backend" cmd /k ".\venv\Scripts\uvicorn.exe api.main:app --host 0.0.0.0 --port 8000"
 
 echo Starting Dashboard Web Server (Port 3000)...
-start "SmartOmniSentinel Dashboard" cmd /c "python -m http.server 3000 --directory dashboard"
+start "SmartOmniSentinel Dashboard" cmd /k ".\venv\Scripts\python.exe -m http.server 3000 --directory dashboard"
 
 echo Starting Local Ollama LLM Server (Port 11434)...
 start "SmartOmniSentinel Ollama LLM" cmd /c "set OLLAMA_MODELS=%~dp0models\ollama && ollama serve"
@@ -34,12 +36,15 @@ echo [3] Real Fight Video File (real_fight.mp4)
 echo ========================================================
 set /p SOURCE_CHOICE="Select option [1, 2, or 3, default: 1]: "
 
+
 if "%SOURCE_CHOICE%"=="2" (
-    echo Starting AI Camera Engine - Video File Ingest - using your_video.mp4...
-    start "SmartOmniSentinel AI (Video)" cmd /k python scripts/demo_ingest.py --video your_video.mp4 --camera "Main Entrance" --live_frame dashboard/cam_mobile.jpg --engine pose
+    echo Starting AI Engine - CAM-01 using download.mp4...
+    start "SmartOmniSentinel AI CAM-01" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video download.mp4 --camera "Main Entrance" --live_frame dashboard/cam_mobile.jpg --engine pose
+    echo Starting AI Engine - CAM-02 using real_fight.mp4...
+    start "SmartOmniSentinel AI CAM-02" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video real_fight.mp4 --camera "Parking Lot B" --live_frame dashboard/cam_laptop.jpg --engine pose
 ) else if "%SOURCE_CHOICE%"=="3" (
     echo Starting AI Camera Engine - Video File Ingest - using real_fight.mp4...
-    start "SmartOmniSentinel AI (Video)" cmd /k python scripts/demo_ingest.py --video real_fight.mp4 --camera "Main Entrance" --live_frame dashboard/cam_mobile.jpg --engine pose
+    start "SmartOmniSentinel AI (Video)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video real_fight.mp4 --camera "Main Entrance" --live_frame dashboard/cam_mobile.jpg --engine pose
 ) else (
     REM DroidCam IP address configuration
     set DEFAULT_IP=192.168.137.120
@@ -49,7 +54,7 @@ if "%SOURCE_CHOICE%"=="2" (
     if "%DROID_IP%"=="" set DROID_IP=%DEFAULT_IP%
 
     echo Starting AI Camera Engine - Mobile Camera Ingest - using http://%DROID_IP%:4747/video...
-    start "SmartOmniSentinel AI (Mobile)" cmd /k python scripts/demo_ingest.py --video http://%DROID_IP%:4747/video --camera "Main Entrance" --live_frame dashboard/cam_mobile.jpg --engine pose
+    start "SmartOmniSentinel AI (Mobile)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video http://%DROID_IP%:4747/video --camera "Main Entrance" --live_frame dashboard/cam_mobile.jpg --engine pose
 )
 
 echo Starting AI Camera Engine (Laptop Webcam Ingest)...

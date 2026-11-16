@@ -21,7 +21,7 @@ from services.inference.tracker import Track
 logger = get_logger(__name__)
 
 WINDOW_SIZE = 16
-FEATURE_DIM = 34                        # Must match training: 17 joints × 2 coords
+FEATURE_DIM = 51                        # 17 keypoints × 3 (x, y, confidence)
 CLASS_NORMAL = 0
 CLASS_VIOLENT = 1
 MIN_CLASSIFICATION_CONFIDENCE = 0.50   # Raised from 0.35 to reduce false alarms
@@ -36,6 +36,7 @@ class ClassificationResult:
     class_probs: Dict[str, float]
     track_ids: List[int]
     people_count: int
+    joint_attention: Optional[np.ndarray] = None
 
 
 class TrackWindow:
@@ -62,21 +63,48 @@ class TemporalClassificationEngine:
         self._smoothing_buffers: Dict[int, Deque[int]] = {}
         self._frame_count = 0
         
-        # ONNX Model Path for RWF-2000 3D CNN
+        # 3D CNN Model loader — tries ONNX first, falls back to PyTorch .pth
         import os
         from pathlib import Path
-        self.onnx_model_path = os.path.join(str(Path(__file__).parent.parent.parent), "models", "violence_model.onnx")
+        _models_dir = Path(__file__).parent.parent.parent / "models"
+        self.onnx_model_path = str(_models_dir / "violence_model.onnx")
         self.onnx_session = None
-        
+        self.r3d_torch_model = None
+
+        # 1. Try ONNX
         if os.path.exists(self.onnx_model_path):
             try:
                 import onnxruntime as ort
-                self.onnx_session = ort.InferenceSession(self.onnx_model_path)
-                logger.info("Successfully loaded RWF-2000 ONNX 3D CNN Model!")
+                self.onnx_session = ort.InferenceSession(
+                    self.onnx_model_path, providers=["CPUExecutionProvider"]
+                )
+                logger.info("Loaded RWF-2000 ONNX 3D CNN model.")
             except ImportError:
-                logger.warning("onnxruntime not installed. Falling back to skeleton heuristics.")
+                logger.warning("onnxruntime not installed. Trying PyTorch fallback.")
             except Exception as e:
-                logger.error(f"Failed to load ONNX model: {e}")
+                logger.warning(f"ONNX load failed ({e}). Trying PyTorch fallback.")
+
+        # 2. Fallback: PyTorch .pth state dict
+        if self.onnx_session is None:
+            pth_path = str(_models_dir / "violence_model.pth")
+            if os.path.exists(pth_path):
+                try:
+                    import torch
+                    import torch.nn as nn
+                    from torchvision.models.video import r3d_18
+                    _r3d = r3d_18(weights=None)
+                    _r3d.fc = nn.Sequential(
+                        nn.Dropout(0.5),
+                        nn.Linear(_r3d.fc.in_features, 1)
+                    )
+                    _r3d.load_state_dict(
+                        torch.load(pth_path, map_location="cpu", weights_only=True)
+                    )
+                    _r3d.eval()
+                    self.r3d_torch_model = _r3d
+                    logger.info("Loaded RWF-2000 PyTorch R3D-18 model (pth fallback).")
+                except Exception as e:
+                    logger.error(f"PyTorch model load also failed: {e}")
 
     def _get_window(self, track_id: int) -> TrackWindow:
         if track_id not in self._track_windows:
@@ -99,8 +127,12 @@ class TemporalClassificationEngine:
 
         self._frame_count += 1
 
-        # --- 3D CNN (RWF-2000) PATH ---
-        if getattr(self, 'onnx_session', None) is not None:
+        # --- 3D CNN (RWF-2000) PATH — ONNX or PyTorch backend ---
+        _has_cnn = (
+            getattr(self, 'onnx_session', None) is not None
+            or getattr(self, 'r3d_torch_model', None) is not None
+        )
+        if _has_cnn:
             # Throttle 3D CNN to run every 4 frames to avoid massive lag
             if self._frame_count % 4 != 0:
                 return None
@@ -113,7 +145,6 @@ class TemporalClassificationEngine:
                 return None
                 
             all_frames = buffer.snapshot()
-            # Take the 16 most recent frames to preserve natural motion speed
             recent_frames = all_frames[-16:]
             
             sampled_frames = []
@@ -131,20 +162,22 @@ class TemporalClassificationEngine:
             video_tensor = np.transpose(video_tensor, (3, 0, 1, 2))
             video_tensor = np.expand_dims(video_tensor, axis=0).astype(np.float32)
             
-            input_name = self.onnx_session.get_inputs()[0].name
-            output_name = self.onnx_session.get_outputs()[0].name
+            if self.onnx_session is not None:
+                input_name = self.onnx_session.get_inputs()[0].name
+                output_name = self.onnx_session.get_outputs()[0].name
+                result = self.onnx_session.run([output_name], {input_name: video_tensor})
+                prob = float(result[0][0][0])
+            else:
+                import torch
+                t = torch.tensor(video_tensor)
+                with torch.no_grad():
+                    prob = float(torch.sigmoid(self.r3d_torch_model(t)).item())
             
-            result = self.onnx_session.run([output_name], {input_name: video_tensor})
-            prob = float(result[0][0][0])
-            
-            # Mitigate false positives caused by camera shake
             if frame_optical_flow_magnitude > 4.5:
-                # Camera is likely moving; penalize violence confidence heavily
                 prob *= 0.3
             elif frame_optical_flow_magnitude > 2.5:
                 prob *= 0.7
             
-            # Use temporal smoothing to prevent single-frame flickering
             buf = self._smoothing_buffers.setdefault("onnx_global", deque(maxlen=SMOOTHING_WINDOW))
             buf.append(1 if prob > MIN_CLASSIFICATION_CONFIDENCE else 0)
             
@@ -159,7 +192,7 @@ class TemporalClassificationEngine:
                 )
             return None
 
-        # --- FALLBACK: SKELETON ST-GCN PATH (Pre-Training) ---
+        # --- SKELETON ST-GCN / TEMPORAL PATH ---
         centroids = {t.track_id: t.centroid for t in tracks}
         min_dist, avg_dist = self._compute_inter_person_distances(centroids)
 
@@ -197,16 +230,17 @@ class TemporalClassificationEngine:
         scene_flow_magnitude: float,
     ) -> np.ndarray:
         """
-        Build 34-dim feature vector matching the training data format:
-          features[0:34] = 17 keypoints × (x, y) normalized to [0, 1]
-        Motion / inter-person / optical-flow features are intentionally
-        excluded here — they were not present in the Kaggle training data.
-        They will be re-introduced when training on RWF-2000 with the
-        full 55-dim feature set.
+        Build 51-dim feature vector:
+          [0:34]  = 17 keypoints × (x, y) normalized to [0, 1]
+          [34:51] = 17 keypoint confidence scores [0, 1]
         """
         features = np.zeros(FEATURE_DIM, dtype=np.float32)
         if pose is not None and pose.is_valid:
             features[0:34] = pose.keypoints.flatten()
+            if hasattr(pose, "keypoint_conf") and pose.keypoint_conf is not None:
+                features[34:51] = pose.keypoint_conf
+            else:
+                features[34:51] = 1.0
         return features
 
     def _classify(
@@ -217,44 +251,78 @@ class TemporalClassificationEngine:
     ) -> Optional[ClassificationResult]:
         from services.inference.model_loader import get_models
         models = get_models()
-        if models.classifier is None:
-            return None
         try:
             import torch
-            x = torch.tensor(window.get_window_tensor(), dtype=torch.float32).unsqueeze(0)
-            with torch.no_grad():
-                logits = models.classifier(x)           # shape: (1, 2)
-                probs = torch.softmax(logits, dim=-1)[0].cpu().numpy()  # shape: (2,)
+
+            # 1. Extract pairwise inter-person proximity features
+            prox_features = np.zeros(8, dtype=np.float32)
+            if getattr(models, "proximity_extractor", None) is not None:
+                prox_obj = models.proximity_extractor.extract(tracks, poses)
+                prox_features = prox_obj.features
+
+            raw_window = window.get_window_tensor()  # (16, 51)
+            joint_attention = None
+
+            # 2. ST-GCN Inference
+            if getattr(models, "stgcn_classifier", None) is not None:
+                x = torch.tensor(raw_window, dtype=torch.float32).unsqueeze(0)  # (1, 16, 51)
+                p = torch.tensor(prox_features, dtype=torch.float32).unsqueeze(0)
+                with torch.no_grad():
+                    logits = models.stgcn_classifier(x, p)
+                    probs = torch.softmax(logits, dim=-1)[0].cpu().numpy()
+
+                # Grad-CAM explainability hook
+                if getattr(models, "stgcn_gradcam", None) is not None:
+                    try:
+                        joint_attention = models.stgcn_gradcam.generate_heatmap(x, p)
+                    except Exception:
+                        joint_attention = None
+
+            # Legacy CNN+GRU fallback
+            elif getattr(models, "classifier", None) is not None:
+                # Legacy model expected 34 dims
+                legacy_tensor = raw_window[:, :34]
+                x = torch.tensor(legacy_tensor, dtype=torch.float32).unsqueeze(0)
+                with torch.no_grad():
+                    logits = models.classifier(x)
+                    probs = torch.softmax(logits, dim=-1)[0].cpu().numpy()
+            else:
+                return None
+
+            prob_violent = float(probs[CLASS_VIOLENT])
+
+            # 3. Solo Activity Suppression:
+            # If only 1 person or no close proximity (feature[7] == 0),
+            # aggressively suppress false alarms (pushups, stretching, flailing).
+            if prox_features[7] == 0.0 and len(tracks) < 2:
+                prob_violent *= 0.35
 
             class_probs = {
-                "normal": float(probs[CLASS_NORMAL]),
-                "violent_interaction": float(probs[CLASS_VIOLENT]),
+                "normal": float(1.0 - prob_violent),
+                "violent_interaction": prob_violent,
             }
 
-            # ── Temporal smoothing ────────────────────────────────────────────
-            # Record raw prediction in a per-track rolling buffer.
-            # Alert fires ONLY when SMOOTHING_THRESHOLD of the last
-            # SMOOTHING_WINDOW frames predict violence, suppressing isolated
-            # false-positive frames and reducing effective FPR.
+            # 4. Temporal Smoothing
             buf = self._smoothing_buffers.setdefault(
                 window.track_id, deque(maxlen=SMOOTHING_WINDOW)
             )
-            buf.append(int(np.argmax(probs)))
+            predicted_class = CLASS_VIOLENT if prob_violent >= MIN_CLASSIFICATION_CONFIDENCE else CLASS_NORMAL
+            buf.append(predicted_class)
             violent_count = sum(1 for p in buf if p == CLASS_VIOLENT)
 
             if violent_count < SMOOTHING_THRESHOLD:
                 return None
 
-            violent_conf = float(probs[CLASS_VIOLENT])
-            if violent_conf < MIN_CLASSIFICATION_CONFIDENCE:
+            if prob_violent < MIN_CLASSIFICATION_CONFIDENCE:
                 return None
 
             return ClassificationResult(
                 event_type=EventType.VIOLENT_INTERACTION,
-                confidence=violent_conf,
+                confidence=prob_violent,
                 class_probs=class_probs,
                 track_ids=[t.track_id for t in tracks],
                 people_count=len(tracks),
+                joint_attention=joint_attention,
             )
         except Exception as exc:
             logger.error("classification_error", error=str(exc))

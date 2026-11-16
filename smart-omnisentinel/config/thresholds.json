@@ -1,0 +1,9 @@
+{
+  "sports": 0.85,
+  "office": 0.55,
+  "street": 0.65,
+  "playground": 0.80,
+  "indoor_generic": 0.60,
+  "_default": 0.60
+}
+

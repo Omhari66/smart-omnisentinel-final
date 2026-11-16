@@ -67,6 +67,8 @@ class RiskSignals:
     zone_sensitivity: float    # 0.0–1.0 from zone config
     hour_of_day: int           # 0–23
     human_confirmed: bool      # Reviewer has confirmed this event
+    weapon_detected: bool = False  # Secondary signal: weapon within track proximity
+    weapon_type: Optional[str] = None  # knife, baseball_bat, bottle, scissors
 
 
 @dataclass
@@ -75,6 +77,8 @@ class RiskScore:
     score: int                  # 0–100
     severity: Severity
     factor_breakdown: Dict[str, float]
+    weapon_detected: bool = False
+    weapon_type: Optional[str] = None
 
 
 def compute_risk_score(
@@ -116,6 +120,10 @@ def compute_risk_score(
         + W_HUMAN  * human_factor
     )
 
+    # Secondary signal weapon escalation (Day 12):
+    # If weapon detected within 0.5m of an active track -> 1.5x multiplier
+    weapon_mult = 1.5 if signals.weapon_detected else 1.0
+    raw_score = raw_score * weapon_mult
     score = int(max(0, min(100, round(raw_score))))
 
     # --- Tier assignment ---
@@ -136,6 +144,9 @@ def compute_risk_score(
         "time_of_day": round(time_factor, 3),
         "human_confirmed": round(human_factor, 3),
         "raw_score": round(raw_score, 2),
+        "weapon_multiplier": weapon_mult,
+        "weapon_detected": signals.weapon_detected,
+        "weapon_type": signals.weapon_type,
     }
 
     logger.debug(
@@ -143,9 +154,17 @@ def compute_risk_score(
         score=score,
         severity=severity,
         breakdown=breakdown,
+        weapon_detected=signals.weapon_detected,
+        weapon_type=signals.weapon_type,
     )
 
-    return RiskScore(score=score, severity=severity, factor_breakdown=breakdown)
+    return RiskScore(
+        score=score,
+        severity=severity,
+        factor_breakdown=breakdown,
+        weapon_detected=signals.weapon_detected,
+        weapon_type=signals.weapon_type,
+    )
 
 
 def build_signals_from_event(
@@ -172,4 +191,6 @@ def build_signals_from_event(
         zone_sensitivity=zone_sensitivity,
         hour_of_day=hour,
         human_confirmed=human_confirmed,
+        weapon_detected=bool(event.get("weapon_detected", False)),
+        weapon_type=event.get("weapon_type", None),
     )

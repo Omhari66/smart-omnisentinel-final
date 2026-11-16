@@ -33,6 +33,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Load .env file so GEMINI_API_KEY and other settings are available
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent.parent / ".env", override=False)
+except ImportError:
+    pass  # python-dotenv not installed; rely on shell environment
+
 import cv2
 import numpy as np
 import torch
@@ -45,7 +52,7 @@ SMOOTHING_WINDOW    = 8
 SMOOTHING_THRESHOLD = 5
 VIOLENCE_CONF_MIN   = 0.60
 PROCESS_FPS         = 4
-ALERT_COOLDOWN_SECS = 5.0
+ALERT_COOLDOWN_SECS = 30.0
 DIAG_PRINT_EVERY    = 8
 TRACK_STALE_FRAMES  = 30     # Prune a track's PersonState after this many missed frames
 
@@ -268,12 +275,12 @@ async def generate_llm_summary(
     frame: "np.ndarray",
     conf: float,
     people: int,
-    model: str = "moondream",
+    model: str = "gemini-2.0-flash",
 ) -> str:
     """
-    Send the evidence frame to a locally running Ollama VLM and return a
-    one-sentence incident description.  Falls back gracefully if Ollama is
-    not running or the model is not available.
+    Send the evidence frame to the Gemini Vision API and return a
+    one-sentence incident description. Falls back to a rich contextual
+    summary if GEMINI_API_KEY is not set or the API is unavailable.
     """
     import random
 
@@ -321,46 +328,56 @@ async def generate_llm_summary(
         else:
             return random.choice(low_conf_summaries)
 
-    # ── Try Ollama VLM first ──────────────────────────────────────────────────
-    try:
-        import httpx, cv2 as _cv2
+    # ── Try Gemini Vision API ─────────────────────────────────────────────────
+    gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+    gemini_model   = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 
-        # Downscale to 512px max dimension — Moondream's sweet spot
-        h, w = frame.shape[:2]
-        scale = min(512 / w, 512 / h)
-        if scale < 1:
-            llm_frame = _cv2.resize(frame, (int(w * scale), int(h * scale)))
-        else:
-            llm_frame = frame
+    if gemini_api_key and gemini_api_key not in ("", "AIza...your_key_here..."):
+        try:
+            import cv2 as _cv2
+            from google import genai
+            from google.genai import types as genai_types
 
-        ok, buf = _cv2.imencode(".jpg", llm_frame, [_cv2.IMWRITE_JPEG_QUALITY, 80])
-        if not ok:
-            return _rich_fallback(conf, people)
-        b64_img = base64.b64encode(buf.tobytes()).decode()
+            client = genai.Client(api_key=gemini_api_key)
 
-        payload = {
-            "model": model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Describe what is happening in this image. Focus on the people and their actions.",
-                    "images": [b64_img],
-                }
-            ],
-            "stream": False,
-            "options": {"num_predict": 200, "temperature": 0.1},
-        }
+            # Downscale to 768px max — sweet spot for Gemini Flash
+            h, w = frame.shape[:2]
+            scale = min(768 / w, 768 / h)
+            llm_frame = _cv2.resize(frame, (int(w * scale), int(h * scale))) if scale < 1 else frame
 
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.post("http://localhost:11434/api/chat", json=payload)
-            if resp.status_code == 200:
-                result = resp.json()
-                text = (result.get("message") or {}).get("content", "").strip()
-                if text:
-                    print(f"  [LLM] VLM summary: '{text[:80]}...'")
-                    return text
-    except Exception as e:
-        print(f"  [LLM] Ollama unavailable ({type(e).__name__}), using contextual summary.")
+            ok, buf = _cv2.imencode(".jpg", llm_frame, [_cv2.IMWRITE_JPEG_QUALITY, 85])
+            if not ok:
+                raise ValueError("Frame encode failed")
+
+            img_bytes = buf.tobytes()
+            prompt = (
+                f"You are a security camera AI. This is an evidence snapshot from a surveillance "
+                f"system that detected a potential violent incident involving {people} "
+                f"{'person' if people == 1 else 'people'} with {conf*100:.0f}% confidence. "
+                f"In 1-2 concise sentences, describe exactly what you observe in this image — "
+                f"the people's actions, postures, and location. Be factual and specific."
+            )
+
+            response = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: client.models.generate_content(
+                    model=gemini_model,
+                    contents=[
+                        prompt,
+                        genai_types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg"),
+                    ]
+                )
+            )
+
+            text = response.text.strip() if response.text else ""
+            if text:
+                print(f"  [Gemini] Vision summary: '{text[:100]}...'" if len(text) > 100 else f"  [Gemini] Vision summary: '{text}'")
+                return text
+
+        except Exception as e:
+            print(f"  [Gemini] API error ({type(e).__name__}: {e}), using contextual summary.")
+    else:
+        print("  [LLM] No GEMINI_API_KEY in .env — using contextual summary.")
 
     # ── Rich contextual fallback ──────────────────────────────────────────────
     summary = _rich_fallback(conf, people)

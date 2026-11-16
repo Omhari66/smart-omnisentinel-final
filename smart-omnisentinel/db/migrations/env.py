@@ -18,7 +18,7 @@ def get_url():
     url = settings.db.url
     # Convert async URL to sync for Alembic
     url = url.replace("postgresql+asyncpg://", "postgresql://")
-    url = url.replace("sqlite+aiosqlite://", "sqlite:///")
+    url = url.replace("sqlite+aiosqlite://", "sqlite://")
     return url
 
 def run_migrations_offline():
