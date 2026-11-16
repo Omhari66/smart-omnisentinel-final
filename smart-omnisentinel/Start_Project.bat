@@ -1,16 +1,17 @@
 @echo off
 cd /d "%~dp0"
-set OLLAMA_MODELS=%~dp0models\ollama
 
 color 0A
-title SmartOmniSentinel - Security Operations Center
+title SmartOmniSentinel V2 - Security Operations Center
 
 cls
 echo ========================================================
-echo         SMART OMNISENTINEL - SECURITY OPERATIONS
+echo   SMART OMNISENTINEL V2 - AI SURVEILLANCE PLATFORM
+echo   ST-GCN + GRU (74.8%% Acc) ^| Proximity ^| Weapons
+echo   Optimized for Intel Core Ultra 9 / CPU Edge Ingestion
 echo ========================================================
 echo.
-echo   SELECT CAMERA SURVEILLANCE MODE:
+echo   SELECT SURVEILLANCE OPERATION MODE:
 echo.
 echo   [1] FULL TRIPLE-CCTV CONTROL ROOM (Recommended)
 echo       - CAM-01: DroidCam Mobile Phone (Live WiFi/USB)
@@ -26,13 +27,23 @@ echo   [3] DROIDCAM PHONE ONLY
 echo       - CAM-01: DroidCam Mobile Phone (Live)
 echo       - CAM-02: Laptop Webcam (Live Camera 0)
 echo.
-echo   [4] DEMO VIDEO SIMULATION (No webcams needed)
+echo   [4] ALL-VIDEO SIMULATION MODE (Zero webcams needed)
 echo       - CAM-01: real_fight.mp4
 echo       - CAM-02: real_fight1.mp4
 echo       - CAM-03: cam_stairwell.mp4
+echo.
+echo   [5] SKELETON HUD VIEWER (Standalone GUI Window)
+echo       - Real-time 17-keypoint bone tracking + proximity lines
 echo ========================================================
-set /p SOURCE_CHOICE="Select mode [1, 2, 3, or 4, default: 1]: "
+set /p SOURCE_CHOICE="Select mode [1, 2, 3, 4, or 5, default: 1]: "
 if "%SOURCE_CHOICE%"=="" set SOURCE_CHOICE=1
+
+if "%SOURCE_CHOICE%"=="5" (
+    echo.
+    echo Launching Interactive Skeleton HUD Viewer...
+    .\venv\Scripts\python.exe scripts/live_skeleton_window.py --video 0
+    goto SCRIPT_EXIT
+)
 
 set DROID_IP=10.92.36.164
 if "%SOURCE_CHOICE%"=="1" (
@@ -50,26 +61,22 @@ if "%SOURCE_CHOICE%"=="3" (
 
 echo.
 echo ========================================================
-echo Starting Core Servers & AI Ingestion Pipelines...
+echo Starting Core Servers ^& V2 AI Ingestion Pipelines...
 echo ========================================================
 
 :: 1. Start FastAPI Backend (Port 8000) - Minimized
-echo [1/5] Starting FastAPI Backend (Port 8000)...
+echo [1/4] Starting FastAPI Backend (Port 8000)...
 start /min "SmartOmniSentinel Backend" cmd /k ".\venv\Scripts\uvicorn.exe api.main:app --host 0.0.0.0 --port 8000"
 
 :: 2. Start Dashboard Web Server (Port 3000) - Minimized
-echo [2/5] Starting Dashboard Web Server (Port 3000)...
+echo [2/4] Starting Dashboard Web Server (Port 3000)...
 start /min "SmartOmniSentinel Dashboard" cmd /k ".\venv\Scripts\python.exe -m http.server 3000 --directory dashboard"
-
-:: 3. Start Local Ollama LLM Server - Minimized
-echo [3/5] Starting Ollama LLM Service...
-start /min "SmartOmniSentinel Ollama" cmd /c "set OLLAMA_MODELS=%~dp0models\ollama && ollama serve"
 
 echo Waiting 3 seconds for backend initialization...
 timeout /t 3 /nobreak >nul
 
-:: 4. Start Camera Pipelines based on choice - Minimized
-echo [4/5] Launching Camera AI Ingestion Pipelines...
+:: 3. Start Camera Pipelines based on choice - Minimized
+echo [3/4] Launching V2 AI Ingestion Pipelines (ST-GCN + YOLOv8-Pose)...
 if "%SOURCE_CHOICE%"=="2" goto LAUNCH_MODE_2
 if "%SOURCE_CHOICE%"=="3" goto LAUNCH_MODE_3
 if "%SOURCE_CHOICE%"=="4" goto LAUNCH_MODE_4
@@ -99,13 +106,13 @@ start /min "CAM-03 (Stairwell)" cmd /k .\venv\Scripts\python.exe scripts/demo_in
 goto LAUNCH_COMPLETE
 
 :LAUNCH_COMPLETE
-:: 5. Open Browser
-echo [5/5] Opening Security Operations Dashboard...
+:: 4. Open Browser
+echo [4/4] Opening Security Operations Dashboard...
 start http://localhost:3000
 
 echo.
 echo ========================================================
-echo   SMART OMNISENTINEL IS NOW LIVE!
+echo   SMART OMNISENTINEL V2 IS NOW LIVE!
 echo ========================================================
 echo   Dashboard URL : http://localhost:3000
 echo   API Backend   : http://localhost:8000/docs
@@ -116,3 +123,5 @@ echo   taskkill /f /im python.exe
 echo ========================================================
 echo.
 pause
+
+:SCRIPT_EXIT
