@@ -8,7 +8,9 @@ without restarting the backend.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+import json
+from pathlib import Path
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from api.dependencies import CurrentUser, require_role
@@ -86,6 +88,9 @@ async def get_inference_config(current_user: CurrentUser):
     )
 
 
+
+
+
 @router.put("/inference", response_model=InferenceConfigResponse)
 async def update_inference_config(
     body: InferenceConfigUpdate,
@@ -125,3 +130,6 @@ async def update_inference_config(
         ema_alpha=cfg.ema_alpha,
         cooldown_seconds=cfg.cooldown_seconds,
     )
+
+
+

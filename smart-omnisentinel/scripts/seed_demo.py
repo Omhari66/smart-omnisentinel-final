@@ -65,7 +65,7 @@ async def seed() -> None:
         cam_defs = [
             ("Main Entrance",  "rtsp://192.168.1.10/stream1", "Building A – Front Door",  CameraStatus.ACTIVE),
             ("Parking Lot B",  "rtsp://192.168.1.11/stream1", "Outdoor – North Lot",       CameraStatus.ACTIVE),
-            ("Stairwell C3",   "rtsp://192.168.1.12/stream1", "Building C – Floor 3",      CameraStatus.OFFLINE),
+            ("Stairwell C3",   "rtsp://192.168.1.12/stream1", "Building C – Floor 3",      CameraStatus.ACTIVE),
         ]
 
         cam_ids: list[uuid.UUID] = []

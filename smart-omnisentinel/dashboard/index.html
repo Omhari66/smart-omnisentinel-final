@@ -627,15 +627,19 @@
                 </div>
             </div>
 
-            <!-- CAM-03 OFFLINE -->
-            <div class="camera-view cam-offline">
-                <div class="cam-corners" style="position:absolute;inset:0;z-index:4;pointer-events:none;"></div>
+            <!-- CAM-03 -->
+            <div class="camera-view" id="cam03-view">
+                <div class="cam-corners cam-scanlines" style="position:absolute;inset:0;z-index:4;pointer-events:none;"></div>
+                <img id="stairwell-camera" src="cam_stairwell.jpg" class="camera-video" style="object-fit:cover;display:none;" alt="CAM-03">
+                <video id="stairwell-video-fallback" src="cam_stairwell.mp4" autoplay loop muted playsinline class="camera-video" style="object-fit:cover;"></video>
                 <div class="camera-osd">
                     <div class="osd-top">
-                        <div class="cam-label"><div class="cam-dot offline"></div>CAM-03 &middot; Stairwell C3</div>
+                        <div class="cam-label"><div class="cam-dot online"></div>CAM-03 &middot; Stairwell C3</div>
+                        <div class="rec-badge">&#x25CF; REC</div>
                     </div>
                     <div class="osd-bottom">
-                        <div class="cam-stats" style="color:var(--danger);opacity:.7;">SIGNAL LOST &mdash; NO FEED</div>
+                        <div class="cam-stats">H.264 &middot; 1920&times;1080 &middot; 30 FPS</div>
+                        <div class="ai-badge"><div class="ai-badge-dot"></div>AI ENGINE ACTIVE</div>
                     </div>
                 </div>
             </div>
@@ -737,9 +741,10 @@
                 <div class="info-section">
                     <div class="info-label">System Metadata</div>
                     <div class="sys-meta-grid">
-                        <div class="sys-meta-row">Model: <span class="sys-meta-val">Temporal_v1.pt</span></div>
-                        <div class="sys-meta-row">Pipeline: <span class="sys-meta-val">Pose + GRU Sliding Window</span></div>
+                        <div class="sys-meta-row">Model: <span class="sys-meta-val">ST-GCN + GRU (74.8% Val Acc)</span></div>
+                        <div class="sys-meta-row">Pipeline: <span class="sys-meta-val">17-Keypoint Graph + Proximity + Weapons</span></div>
                         <div class="sys-meta-row">People: <span class="sys-meta-val" id="det-people">&mdash;</span></div>
+                        <div class="sys-meta-row">Weapon: <span class="sys-meta-val" id="det-weapon" style="color: #60a5fa;">None Detected</span></div>
                     </div>
                 </div>
 
@@ -933,9 +938,13 @@
             connectWebSocket();
             setInterval(fetchIncidents, 2000);
             let _mobileErrCount = 0;
+            let _stairwellErrCount = 0;
             setInterval(() => {
+                // CAM-02: Laptop Webcam
                 const img = document.getElementById('laptop-webcam');
                 if (img) img.src = 'cam_laptop.jpg?t=' + Date.now();
+
+                // CAM-01: Mobile Camera (with video fallback)
                 const mobileImg = document.getElementById('mobile-camera');
                 const fallback  = document.getElementById('main-video-fallback');
                 if (mobileImg) {
@@ -943,6 +952,16 @@
                     t.onload = () => { _mobileErrCount=0; mobileImg.src=t.src; mobileImg.style.display='block'; if(fallback) fallback.style.display='none'; };
                     t.onerror = () => { _mobileErrCount++; if(_mobileErrCount>=5){ mobileImg.style.display='none'; if(fallback) fallback.style.display='block'; } };
                     t.src = 'cam_mobile.jpg?t=' + Date.now();
+                }
+
+                // CAM-03: Stairwell C3 (with video fallback)
+                const stairwellImg = document.getElementById('stairwell-camera');
+                const stairwellFallback = document.getElementById('stairwell-video-fallback');
+                if (stairwellImg) {
+                    const t3 = new Image();
+                    t3.onload = () => { _stairwellErrCount=0; stairwellImg.src=t3.src; stairwellImg.style.display='block'; if(stairwellFallback) stairwellFallback.style.display='none'; };
+                    t3.onerror = () => { _stairwellErrCount++; if(_stairwellErrCount>=5){ stairwellImg.style.display='none'; if(stairwellFallback) stairwellFallback.style.display='block'; } };
+                    t3.src = 'cam_stairwell.jpg?t=' + Date.now();
                 }
             }, 150);
         } catch(e) { console.error('Init error:', e); }
@@ -980,7 +999,7 @@
             });
             document.getElementById('stat-emerg').innerText  = emerg;
             document.getElementById('stat-review').innerText = review;
-            document.getElementById('stat-cams').innerText   = '1';
+            document.getElementById('stat-cams').innerText   = '3';
             updateThreatLevel(emerg);
             
             // If there's an active threat on load, make sure the camera is glowing
@@ -1217,6 +1236,13 @@
         document.getElementById('roi-active-badge').style.display='block';
         renderRoi(document.getElementById('roi-canvas'));
         console.log('[ROI] Zone saved:', JSON.stringify(polyArr));
+        try {
+            fetch(`${API_URL}/config/roi`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}`},
+                body: JSON.stringify(polyArr)
+            }).then(r => r.json()).then(d => console.log('[ROI] Backend synced:', d)).catch(e => console.warn('[ROI] Sync error:', e));
+        } catch(e) {}
     }
 
     function roiClear() {
@@ -1228,6 +1254,12 @@
         const canvas=document.getElementById('roi-canvas');
         if (canvas) { canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height); }
         if (roiRafId) { cancelAnimationFrame(roiRafId); roiRafId=null; }
+        try {
+            fetch(`${API_URL}/config/roi`, {
+                method: 'DELETE',
+                headers: {'Authorization': `Bearer ${authToken}`}
+            }).catch(e => console.warn('[ROI] Clear backend error:', e));
+        } catch(e) {}
     }
 
     function startRoiRender() {

@@ -52,9 +52,14 @@ SMOOTHING_WINDOW    = 8
 SMOOTHING_THRESHOLD = 5
 VIOLENCE_CONF_MIN   = 0.60
 PROCESS_FPS         = 4
-ALERT_COOLDOWN_SECS = 30.0
+ALERT_COOLDOWN_SECS = 5.0
 DIAG_PRINT_EVERY    = 8
 TRACK_STALE_FRAMES  = 30     # Prune a track's PersonState after this many missed frames
+
+# Dynamic runtime variables synced with Dashboard
+CURRENT_THRESHOLD   = 0.60
+CURRENT_PERSISTENCE = 5
+CURRENT_COOLDOWN    = 5.0
 
 
 # ── Simple per-person window + smoother ──────────────────────────────────────
@@ -100,9 +105,10 @@ class PersonState:
 
         self.buffer.append(pred)
         violent_votes = sum(1 for p in self.buffer if p == 1)
+        req_votes = max(1, min(CURRENT_PERSISTENCE, SMOOTHING_THRESHOLD))
         self.is_violent = (
-            violent_votes >= SMOOTHING_THRESHOLD
-            and self.violent_conf >= VIOLENCE_CONF_MIN
+            violent_votes >= req_votes
+            and self.violent_conf >= CURRENT_THRESHOLD
         )
 
 
@@ -520,6 +526,8 @@ async def run_ingest(
     last_alert_ts  = 0.0
     total_inserted = 0
     prev_gray      = None
+    _last_roi_mtime = 0.0
+    global CURRENT_THRESHOLD, CURRENT_COOLDOWN, CURRENT_PERSISTENCE
 
     try:
         while True:
@@ -544,6 +552,41 @@ async def run_ingest(
             if frame_idx % skip != 0:
                 continue
             processed += 1
+
+            # ── Dynamic Config & ROI hot-reloading from Dashboard ───────────
+            if processed % 15 == 0:
+                # 1. Hot-reload ROI from dashboard
+                roi_file_to_check = Path("dashboard/roi_zone.json")
+                if roi_file_to_check.exists():
+                    try:
+                        mtime = roi_file_to_check.stat().st_mtime
+                        if mtime != _last_roi_mtime:
+                            _last_roi_mtime = mtime
+                            with open(roi_file_to_check, "r") as rf:
+                                roi_zone = json.load(rf)
+                            if roi_zone and len(roi_zone) >= 3:
+                                print(f"  [ROI] Active zone hot-reloaded ({len(roi_zone)} points)")
+                    except Exception:
+                        pass
+                elif roi_zone is not None:
+                    roi_zone = None
+                    print("  [ROI] Zone cleared, full-frame monitoring resumed.")
+
+                # 2. Hot-reload Inference Settings from FastAPI
+                try:
+                    import urllib.request
+                    req = urllib.request.Request("http://localhost:8000/config/inference", headers={"User-Agent": "SentinelIngest"})
+                    with urllib.request.urlopen(req, timeout=0.3) as resp:
+                        if resp.status == 200:
+                            cfg_data = json.loads(resp.read().decode())
+                            if "threshold" in cfg_data:
+                                CURRENT_THRESHOLD = float(cfg_data["threshold"])
+                            if "cooldown_seconds" in cfg_data:
+                                CURRENT_COOLDOWN = float(cfg_data["cooldown_seconds"])
+                            if "persistence_frames" in cfg_data:
+                                CURRENT_PERSISTENCE = max(1, int(cfg_data["persistence_frames"]) // 2)
+                except Exception:
+                    pass
 
             # Push frame into circular buffer for evidence clips
             push_frame_to_buffer(camera_id_str, frame)
@@ -643,7 +686,7 @@ async def run_ingest(
                         )
 
                 now = time.time()
-                if violent_track_id is not None and (now - last_alert_ts) >= ALERT_COOLDOWN_SECS:
+                if violent_track_id is not None and (now - last_alert_ts) >= CURRENT_COOLDOWN:
                     last_alert_ts = now
                     people = len(track_ids)
 
@@ -701,7 +744,7 @@ if __name__ == "__main__":
     parser.add_argument("--camera",     type=str, default="Main Entrance", help="Camera name in DB")
     parser.add_argument("--live_frame", type=str, default=None,   help="Path to dump live frames for the dashboard")
     parser.add_argument("--engine",     type=str, default="pose", choices=["pose", "cnn"], help="AI Engine")
-    parser.add_argument("--roi_zone",   type=str, default=None,   help="Path to roi_zone.json saved by the dashboard (optional)")
+    parser.add_argument("--roi_zone",   type=str, default="dashboard/roi_zone.json", help="Path to roi_zone.json saved by the dashboard")
     parser.add_argument("--no-llm",     dest="llm", action="store_false", help="Disable local Ollama LLM summarization")
     parser.set_defaults(llm=True)
     parser.add_argument("--llm_model",  type=str, default="moondream", help="Ollama model name (default: moondream)")

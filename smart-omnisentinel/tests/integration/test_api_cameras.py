@@ -8,7 +8,7 @@ Uses FastAPI's TestClient with an in-memory SQLite test database.
 from __future__ import annotations
 
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 
 from api.main import create_app
 from core.config import get_settings
@@ -32,7 +32,28 @@ def test_app():
 
 @pytest.fixture
 async def client(test_app):
-    async with AsyncClient(app=test_app, base_url="http://test") as c:
+    from db.session import get_engine
+    import db.models
+    from core.security import hash_password
+    from db.models.user import User
+    from core.constants import UserRole
+    engine = get_engine()
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    async with get_session_factory()() as db:
+        from sqlalchemy import select
+        existing = (await db.execute(select(User).where(User.email == "admin@test.com"))).scalar_one_or_none()
+        if not existing:
+            user = User(
+                email="admin@test.com",
+                hashed_password=hash_password("admin123"),
+                full_name="Admin",
+                role=UserRole.ADMIN,
+                is_active=True
+            )
+            db.add(user)
+            await db.commit()
+    async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as c:
         yield c
 
 
