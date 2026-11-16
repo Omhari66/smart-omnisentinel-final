@@ -40,8 +40,33 @@ if "%SOURCE_CHOICE%"=="" set SOURCE_CHOICE=1
 
 if "%SOURCE_CHOICE%"=="5" (
     echo.
-    echo Launching Interactive Skeleton HUD Viewer...
-    .\venv\Scripts\python.exe scripts/live_skeleton_window.py --video 0
+    echo ========================================================
+    echo   SKELETON HUD VIEWER - SELECT CAMERA INPUT:
+    echo   [1] DroidCam Mobile Phone Camera (Recommended)
+    echo   [2] Laptop Built-in Webcam (Camera 0)
+    echo   [3] Demo Fight Video File (real_fight.mp4)
+    echo ========================================================
+    set /p SKEL_CHOICE="Select input [1, 2, or 3, default: 1]: "
+    if "%SKEL_CHOICE%"=="" set SKEL_CHOICE=1
+
+    if "%SKEL_CHOICE%"=="2" (
+        echo.
+        echo Launching Skeleton HUD on Laptop Webcam...
+        .\venv\Scripts\python.exe scripts/live_skeleton_window.py --source 0
+    ) else if "%SKEL_CHOICE%"=="3" (
+        echo.
+        echo Launching Skeleton HUD on Demo Video...
+        .\venv\Scripts\python.exe scripts/live_skeleton_window.py --source real_fight.mp4
+    ) else (
+        set DROID_IP=10.92.36.164
+        echo.
+        echo Enter the WiFi IP Address shown in your DroidCam phone app:
+        set /p USER_IP="IP Address [default: %DROID_IP%]: "
+        if not "%USER_IP%"=="" set DROID_IP=%USER_IP%
+        echo.
+        echo Launching Skeleton HUD on Mobile Phone (http://%DROID_IP%:4747/video)...
+        .\venv\Scripts\python.exe scripts/live_skeleton_window.py --source http://%DROID_IP%:4747/video
+    )
     goto SCRIPT_EXIT
 )
 
@@ -123,5 +148,4 @@ echo   taskkill /f /im python.exe
 echo ========================================================
 echo.
 pause
-
 :SCRIPT_EXIT

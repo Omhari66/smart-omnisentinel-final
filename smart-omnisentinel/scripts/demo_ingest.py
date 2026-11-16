@@ -75,7 +75,7 @@ class PersonState:
         if flat.shape[0] == FEATURE_DIM:
             self.window.append(flat)
 
-    def classify(self, clf: TemporalClassifier, device: torch.device, engine: str, onnx_session=None, raw_frame_buffer=None) -> None:
+    def classify(self, clf: TemporalClassifier, device: torch.device, engine: str, onnx_session=None, raw_frame_buffer=None, num_people: int = 1) -> None:
         if engine == "cnn" and onnx_session is not None and raw_frame_buffer is not None and len(raw_frame_buffer) == 16:
             # --- 3D CNN (RWF-2000 trained) PATH ---
             video_tensor = np.stack(list(raw_frame_buffer))
@@ -102,6 +102,30 @@ class PersonState:
 
             pred = int(np.argmax(probs))
             self.violent_conf = float(probs[1])
+
+            # ── Kinematic Motion Gate & Solo Actor Protection ───────────────
+            # Compute frame-to-frame joint displacement across window
+            w_arr = np.array(list(self.window))  # (16, 34)
+            diffs = np.diff(w_arr, axis=0)       # (15, 34)
+            valid_mask = (w_arr[:-1] > 0.01) & (w_arr[1:] > 0.01)
+            motion_mag = float(np.mean(np.abs(diffs[valid_mask]))) if np.any(valid_mask) else 0.0
+
+            # Check if lower body (hips, knees, ankles) is visible
+            # In (34,) coordinates, indices 22..33 correspond to joints 11..16
+            latest_kp = w_arr[-1]
+            lower_body_detected = bool(np.any(latest_kp[22:] > 0.05))
+
+            # Rule 1: Static / Quiescent person (sitting, subtle head motion)
+            if motion_mag < 0.015:
+                self.violent_conf = min(self.violent_conf * 0.15, 0.15)
+                pred = 0
+
+            # Rule 2: Solo actor (only 1 person in frame, no second combatant)
+            elif num_people < 2:
+                # Truncated face/chest close-up or gentle movements cannot be a violent altercation
+                if not lower_body_detected or motion_mag < 0.035:
+                    self.violent_conf = min(self.violent_conf * 0.30, 0.25)
+                    pred = 0
 
         self.buffer.append(pred)
         violent_votes = sum(1 for p in self.buffer if p == 1)
@@ -676,7 +700,7 @@ async def run_ingest(
                     track_last_seen[track_id] = processed
 
                     states[track_id].push(kp)
-                    states[track_id].classify(clf, device, engine, onnx_session, raw_frame_buffer)
+                    states[track_id].classify(clf, device, engine, onnx_session, raw_frame_buffer, num_people=len(track_ids))
 
                     if (states[track_id].is_violent
                             and states[track_id].violent_conf > violent_track_conf):

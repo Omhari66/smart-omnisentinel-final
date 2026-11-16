@@ -543,10 +543,11 @@ class LiveSkeletonApp:
                 else:
                     frame_violence = 0.55 * highest_saliency_score + 0.45 * prox_danger
             elif num_persons == 1:
-                if neural_threat > 0.0:
-                    frame_violence = 0.50 * neural_threat + 0.20 * highest_saliency_score
+                # Solo actor protection: a single person sitting or moving their head cannot be in a fight
+                if highest_saliency_score < 0.20:
+                    frame_violence = min(neural_threat * 0.15, 0.20)
                 else:
-                    frame_violence = highest_saliency_score * 0.35  # heavily scaled down
+                    frame_violence = 0.35 * neural_threat + 0.25 * highest_saliency_score
             else:
                 frame_violence = 0.0
 
@@ -603,7 +604,7 @@ class LiveSkeletonApp:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="SmartOmniSentinel — Live SOTA Skeleton Monitor")
-    parser.add_argument("--source", type=str, default="real_fight.mp4", help="Video path or webcam index '0'")
+    parser.add_argument("--source", "--video", dest="source", type=str, default="0", help="Video path, stream URL, or webcam index '0'")
     parser.add_argument("--scene", type=str, default="street", choices=["street", "office", "sports", "indoor_generic"])
     parser.add_argument("--conf", type=float, default=0.35, help="Detection confidence threshold")
     parser.add_argument("--device", type=str, default="cpu", help="cpu or cuda")
