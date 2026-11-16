@@ -35,58 +35,76 @@ echo.
 echo   [5] SKELETON HUD VIEWER (Standalone GUI Window)
 echo       - Real-time 17-keypoint bone tracking + proximity lines
 echo ========================================================
-set /p SOURCE_CHOICE="Select mode [1, 2, 3, 4, or 5, default: 1]: "
-if "%SOURCE_CHOICE%"=="" set SOURCE_CHOICE=1
+choice /c 12345 /n /m "Select mode [1, 2, 3, 4, or 5]: "
 
-if "%SOURCE_CHOICE%"=="5" (
-    echo.
-    echo ========================================================
-    echo   SKELETON HUD VIEWER - SELECT CAMERA INPUT:
-    echo   [1] DroidCam Mobile Phone Camera (Recommended)
-    echo   [2] Laptop Built-in Webcam (Camera 0)
-    echo   [3] Demo Fight Video File (real_fight.mp4)
-    echo ========================================================
-    set /p SKEL_CHOICE="Select input [1, 2, or 3, default: 1]: "
-    if "%SKEL_CHOICE%"=="" set SKEL_CHOICE=1
+set MODE_CHOICE=%ERRORLEVEL%
 
-    if "%SKEL_CHOICE%"=="2" (
-        echo.
-        echo Launching Skeleton HUD on Laptop Webcam...
-        .\venv\Scripts\python.exe scripts/live_skeleton_window.py --source 0
-    ) else if "%SKEL_CHOICE%"=="3" (
-        echo.
-        echo Launching Skeleton HUD on Demo Video...
-        .\venv\Scripts\python.exe scripts/live_skeleton_window.py --source real_fight.mp4
-    ) else (
-        set DROID_IP=10.92.36.164
-        echo.
-        echo Enter the WiFi IP Address shown in your DroidCam phone app:
-        set /p USER_IP="IP Address [default: %DROID_IP%]: "
-        if not "%USER_IP%"=="" set DROID_IP=%USER_IP%
-        echo.
-        echo Launching Skeleton HUD on Mobile Phone (http://%DROID_IP%:4747/video)...
-        .\venv\Scripts\python.exe scripts/live_skeleton_window.py --source http://%DROID_IP%:4747/video
-    )
-    goto SCRIPT_EXIT
-)
+if "%MODE_CHOICE%"=="5" goto MENU_SKELETON
+if "%MODE_CHOICE%"=="4" goto LAUNCH_MODE_4_ENTRY
+if "%MODE_CHOICE%"=="2" goto LAUNCH_MODE_2_ENTRY
 
-set DROID_IP=10.92.36.164
-if "%SOURCE_CHOICE%"=="1" (
-    echo.
-    echo Enter the WiFi IP Address shown in your DroidCam phone app:
-    set /p USER_IP="IP Address [default: %DROID_IP%]: "
-    if not "%USER_IP%"=="" set DROID_IP=%USER_IP%
-)
-if "%SOURCE_CHOICE%"=="3" (
-    echo.
-    echo Enter the WiFi IP Address shown in your DroidCam phone app:
-    set /p USER_IP="IP Address [default: %DROID_IP%]: "
-    if not "%USER_IP%"=="" set DROID_IP=%USER_IP%
-)
+:: Mode 1 or 3 requires DroidCam IP
+:PROMPT_DROID_IP
+set USER_IP=
+echo.
+echo Enter the WiFi IP Address shown in your DroidCam phone app:
+set /p USER_IP="IP Address [press Enter for 10.92.36.164]: "
+if "%USER_IP%"=="" set USER_IP=10.92.36.164
+set USER_IP=%USER_IP: =%
+if "%USER_IP%"=="" set USER_IP=10.92.36.164
+set DROID_IP=%USER_IP%
+goto START_SERVERS
 
+:LAUNCH_MODE_2_ENTRY
+goto START_SERVERS
+
+:LAUNCH_MODE_4_ENTRY
+goto START_SERVERS
+
+:MENU_SKELETON
 echo.
 echo ========================================================
-echo Starting Core Servers ^& V2 AI Ingestion Pipelines...
+echo   SKELETON HUD VIEWER - SELECT CAMERA INPUT:
+echo   [1] DroidCam Mobile Phone Camera
+echo   [2] Laptop Built-in Webcam (Camera 0)
+echo   [3] Demo Fight Video File (real_fight.mp4)
+echo ========================================================
+choice /c 123 /n /m "Select input [1, 2, or 3]: "
+set SKEL_CHOICE=%ERRORLEVEL%
+
+if "%SKEL_CHOICE%"=="2" goto LAUNCH_SKEL_LAPTOP
+if "%SKEL_CHOICE%"=="3" goto LAUNCH_SKEL_VIDEO
+
+:LAUNCH_SKEL_PHONE
+set USER_IP=
+echo.
+echo Enter the WiFi IP Address shown in your DroidCam phone app:
+set /p USER_IP="IP Address [press Enter for 10.92.36.164]: "
+if "%USER_IP%"=="" set USER_IP=10.92.36.164
+set USER_IP=%USER_IP: =%
+if "%USER_IP%"=="" set USER_IP=10.92.36.164
+set DROID_IP=%USER_IP%
+echo.
+echo Launching Skeleton HUD on Mobile Phone: http://%DROID_IP%:4747/video
+".\venv\Scripts\python.exe" scripts\live_skeleton_window.py --source "http://%DROID_IP%:4747/video"
+goto SCRIPT_EXIT
+
+:LAUNCH_SKEL_LAPTOP
+echo.
+echo Launching Skeleton HUD on Laptop Webcam (Camera 0)...
+".\venv\Scripts\python.exe" scripts\live_skeleton_window.py --source 0
+goto SCRIPT_EXIT
+
+:LAUNCH_SKEL_VIDEO
+echo.
+echo Launching Skeleton HUD on Demo Video (real_fight.mp4)...
+".\venv\Scripts\python.exe" scripts\live_skeleton_window.py --source real_fight.mp4
+goto SCRIPT_EXIT
+
+:START_SERVERS
+echo.
+echo ========================================================
+echo Starting Core Servers and V2 AI Ingestion Pipelines...
 echo ========================================================
 
 :: 1. Start FastAPI Backend (Port 8000) - Minimized
@@ -98,39 +116,38 @@ echo [2/4] Starting Dashboard Web Server (Port 3000)...
 start /min "SmartOmniSentinel Dashboard" cmd /k ".\venv\Scripts\python.exe -m http.server 3000 --directory dashboard"
 
 echo Waiting 3 seconds for backend initialization...
-timeout /t 3 /nobreak >nul
+ping 127.0.0.1 -n 4 >nul
 
-:: 3. Start Camera Pipelines based on choice - Minimized
+:: 3. Start Camera Ingestion Pipelines based on choice
 echo [3/4] Launching V2 AI Ingestion Pipelines (ST-GCN + YOLOv8-Pose)...
-if "%SOURCE_CHOICE%"=="2" goto LAUNCH_MODE_2
-if "%SOURCE_CHOICE%"=="3" goto LAUNCH_MODE_3
-if "%SOURCE_CHOICE%"=="4" goto LAUNCH_MODE_4
-goto LAUNCH_MODE_1
+if "%MODE_CHOICE%"=="2" goto RUN_CAMERAS_MODE_2
+if "%MODE_CHOICE%"=="3" goto RUN_CAMERAS_MODE_3
+if "%MODE_CHOICE%"=="4" goto RUN_CAMERAS_MODE_4
 
-:LAUNCH_MODE_1
-start /min "CAM-01 (Mobile)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video http://%DROID_IP%:4747/video --camera "Main Entrance" --live_frame dashboard/cam_mobile.jpg --engine pose
-start /min "CAM-02 (Laptop)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video 0 --camera "Parking Lot B" --live_frame dashboard/cam_laptop.jpg --engine pose
-start /min "CAM-03 (Stairwell)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video dashboard/cam_stairwell.mp4 --camera "Stairwell C3" --live_frame dashboard/cam_stairwell.jpg --engine pose
-goto LAUNCH_COMPLETE
+:RUN_CAMERAS_MODE_1
+start /min "CAM-01 (Mobile)" cmd /k ".\venv\Scripts\python.exe scripts\demo_ingest.py --video http://%DROID_IP%:4747/video --camera \"Main Entrance\" --live_frame dashboard\cam_mobile.jpg --engine pose"
+start /min "CAM-02 (Laptop)" cmd /k ".\venv\Scripts\python.exe scripts\demo_ingest.py --video 0 --camera \"Parking Lot B\" --live_frame dashboard\cam_laptop.jpg --engine pose"
+start /min "CAM-03 (Stairwell)" cmd /k ".\venv\Scripts\python.exe scripts\demo_ingest.py --video dashboard\cam_stairwell.mp4 --camera \"Stairwell C3\" --live_frame dashboard\cam_stairwell.jpg --engine pose"
+goto FINISH_LAUNCH
 
-:LAUNCH_MODE_2
-start /min "CAM-01 (Video)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video real_fight.mp4 --camera "Main Entrance" --live_frame dashboard/cam_mobile.jpg --engine pose
-start /min "CAM-02 (Laptop)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video 0 --camera "Parking Lot B" --live_frame dashboard/cam_laptop.jpg --engine pose
-start /min "CAM-03 (Stairwell)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video dashboard/cam_stairwell.mp4 --camera "Stairwell C3" --live_frame dashboard/cam_stairwell.jpg --engine pose
-goto LAUNCH_COMPLETE
+:RUN_CAMERAS_MODE_2
+start /min "CAM-01 (Video)" cmd /k ".\venv\Scripts\python.exe scripts\demo_ingest.py --video real_fight.mp4 --camera \"Main Entrance\" --live_frame dashboard\cam_mobile.jpg --engine pose"
+start /min "CAM-02 (Laptop)" cmd /k ".\venv\Scripts\python.exe scripts\demo_ingest.py --video 0 --camera \"Parking Lot B\" --live_frame dashboard\cam_laptop.jpg --engine pose"
+start /min "CAM-03 (Stairwell)" cmd /k ".\venv\Scripts\python.exe scripts\demo_ingest.py --video dashboard\cam_stairwell.mp4 --camera \"Stairwell C3\" --live_frame dashboard\cam_stairwell.jpg --engine pose"
+goto FINISH_LAUNCH
 
-:LAUNCH_MODE_3
-start /min "CAM-01 (Mobile)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video http://%DROID_IP%:4747/video --camera "Main Entrance" --live_frame dashboard/cam_mobile.jpg --engine pose
-start /min "CAM-02 (Laptop)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video 0 --camera "Parking Lot B" --live_frame dashboard/cam_laptop.jpg --engine pose
-goto LAUNCH_COMPLETE
+:RUN_CAMERAS_MODE_3
+start /min "CAM-01 (Mobile)" cmd /k ".\venv\Scripts\python.exe scripts\demo_ingest.py --video http://%DROID_IP%:4747/video --camera \"Main Entrance\" --live_frame dashboard\cam_mobile.jpg --engine pose"
+start /min "CAM-02 (Laptop)" cmd /k ".\venv\Scripts\python.exe scripts\demo_ingest.py --video 0 --camera \"Parking Lot B\" --live_frame dashboard\cam_laptop.jpg --engine pose"
+goto FINISH_LAUNCH
 
-:LAUNCH_MODE_4
-start /min "CAM-01 (Video)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video real_fight.mp4 --camera "Main Entrance" --live_frame dashboard/cam_mobile.jpg --engine pose
-start /min "CAM-02 (Video)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video real_fight1.mp4 --camera "Parking Lot B" --live_frame dashboard/cam_laptop.jpg --engine pose
-start /min "CAM-03 (Stairwell)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video dashboard/cam_stairwell.mp4 --camera "Stairwell C3" --live_frame dashboard/cam_stairwell.jpg --engine pose
-goto LAUNCH_COMPLETE
+:RUN_CAMERAS_MODE_4
+start /min "CAM-01 (Video)" cmd /k ".\venv\Scripts\python.exe scripts\demo_ingest.py --video real_fight.mp4 --camera \"Main Entrance\" --live_frame dashboard\cam_mobile.jpg --engine pose"
+start /min "CAM-02 (Video)" cmd /k ".\venv\Scripts\python.exe scripts\demo_ingest.py --video real_fight1.mp4 --camera \"Parking Lot B\" --live_frame dashboard\cam_laptop.jpg --engine pose"
+start /min "CAM-03 (Stairwell)" cmd /k ".\venv\Scripts\python.exe scripts\demo_ingest.py --video dashboard\cam_stairwell.mp4 --camera \"Stairwell C3\" --live_frame dashboard\cam_stairwell.jpg --engine pose"
+goto FINISH_LAUNCH
 
-:LAUNCH_COMPLETE
+:FINISH_LAUNCH
 :: 4. Open Browser
 echo [4/4] Opening Security Operations Dashboard...
 start http://localhost:3000
@@ -148,4 +165,5 @@ echo   taskkill /f /im python.exe
 echo ========================================================
 echo.
 pause
+
 :SCRIPT_EXIT
