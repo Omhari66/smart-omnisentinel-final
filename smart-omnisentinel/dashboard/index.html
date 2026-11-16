@@ -940,9 +940,13 @@
             let _mobileErrCount = 0;
             let _stairwellErrCount = 0;
             setInterval(() => {
-                // CAM-02: Laptop Webcam
-                const img = document.getElementById('laptop-webcam');
-                if (img) img.src = 'cam_laptop.jpg?t=' + Date.now();
+                // CAM-02: Laptop Webcam (smooth preloaded swap)
+                const laptopImg = document.getElementById('laptop-webcam');
+                if (laptopImg) {
+                    const t2 = new Image();
+                    t2.onload = () => { laptopImg.src = t2.src; };
+                    t2.src = 'cam_laptop.jpg?t=' + Date.now();
+                }
 
                 // CAM-01: Mobile Camera (with video fallback)
                 const mobileImg = document.getElementById('mobile-camera');

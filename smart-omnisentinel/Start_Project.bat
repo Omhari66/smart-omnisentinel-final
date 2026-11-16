@@ -53,59 +53,80 @@ echo ========================================================
 set /p SOURCE_CHOICE="Select option [1, 2, 3, or 4, default: 1]: "
 if "%SOURCE_CHOICE%"=="" set SOURCE_CHOICE=1
 
-if "%SOURCE_CHOICE%"=="2" (
-    echo.
-    echo Starting CAM-01: Demo Fight Video (real_fight.mp4)...
-    start "SmartOmniSentinel AI CAM-01 (Video)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video real_fight.mp4 --camera "Main Entrance" --live_frame dashboard/cam_mobile.jpg --engine pose
+if "%SOURCE_CHOICE%"=="2" goto RUN_MODE_2
+if "%SOURCE_CHOICE%"=="3" goto RUN_MODE_3
+if "%SOURCE_CHOICE%"=="4" goto RUN_MODE_4
+goto RUN_MODE_1
 
-    echo Starting CAM-02: Laptop Webcam (Built-in Camera 0)...
-    start "SmartOmniSentinel AI CAM-02 (Laptop)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video 0 --camera "Parking Lot B" --live_frame dashboard/cam_laptop.jpg --engine pose
+:RUN_MODE_1
+echo.
+echo ========================================================
+echo   MODE 1: FULL TRIPLE-CCTV CONTROL ROOM
+echo ========================================================
+set DEFAULT_IP=10.92.36.164
+echo Enter the WiFi IP Address shown in your DroidCam phone app:
+set /p DROID_IP="IP Address [default: %DEFAULT_IP%]: "
+if "%DROID_IP%"=="" set DROID_IP=%DEFAULT_IP%
 
-    echo Starting CAM-03: Stairwell C3 Video (Normal Non-Violent Loop)...
-    start "SmartOmniSentinel AI CAM-03 (Stairwell)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video dashboard/cam_stairwell.mp4 --camera "Stairwell C3" --live_frame dashboard/cam_stairwell.jpg --engine pose
+echo.
+echo Starting CAM-01: DroidCam Mobile Camera (http://%DROID_IP%:4747/video)...
+start "SmartOmniSentinel AI CAM-01 (Mobile)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video http://%DROID_IP%:4747/video --camera "Main Entrance" --live_frame dashboard/cam_mobile.jpg --engine pose
 
-) else if "%SOURCE_CHOICE%"=="3" (
-    set DEFAULT_IP=192.168.137.120
-    echo.
-    echo Enter the WiFi IP Address shown in your DroidCam phone app:
-    set /p DROID_IP="IP Address [default: %DEFAULT_IP%]: "
-    if "%DROID_IP%"=="" set DROID_IP=%DEFAULT_IP%
+echo Starting CAM-02: Laptop Webcam (Built-in Camera 0)...
+start "SmartOmniSentinel AI CAM-02 (Laptop)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video 0 --camera "Parking Lot B" --live_frame dashboard/cam_laptop.jpg --engine pose
 
-    echo Starting CAM-01: DroidCam Mobile Camera (http://%DROID_IP%:4747/video)...
-    start "SmartOmniSentinel AI CAM-01 (Mobile)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video http://%DROID_IP%:4747/video --camera "Main Entrance" --live_frame dashboard/cam_mobile.jpg --engine pose
+echo Starting CAM-03: Stairwell C3 Video (Normal Non-Violent Loop)...
+start "SmartOmniSentinel AI CAM-03 (Stairwell)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video dashboard/cam_stairwell.mp4 --camera "Stairwell C3" --live_frame dashboard/cam_stairwell.jpg --engine pose
+goto RUN_DONE
 
-    echo Starting CAM-02: Laptop Webcam (Built-in Camera 0)...
-    start "SmartOmniSentinel AI CAM-02 (Laptop)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video 0 --camera "Parking Lot B" --live_frame dashboard/cam_laptop.jpg --engine pose
+:RUN_MODE_2
+echo.
+echo ========================================================
+echo   MODE 2: LAPTOP WEBCAM + STAIRWELL VIDEO ONLY
+echo ========================================================
+echo Starting CAM-01: Demo Fight Video (real_fight.mp4)...
+start "SmartOmniSentinel AI CAM-01 (Video)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video real_fight.mp4 --camera "Main Entrance" --live_frame dashboard/cam_mobile.jpg --engine pose
 
-) else if "%SOURCE_CHOICE%"=="4" (
-    echo.
-    echo Starting CAM-01: real_fight.mp4...
-    start "SmartOmniSentinel AI CAM-01 (Video)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video real_fight.mp4 --camera "Main Entrance" --live_frame dashboard/cam_mobile.jpg --engine pose
+echo Starting CAM-02: Laptop Webcam (Built-in Camera 0)...
+start "SmartOmniSentinel AI CAM-02 (Laptop)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video 0 --camera "Parking Lot B" --live_frame dashboard/cam_laptop.jpg --engine pose
 
-    echo Starting CAM-02: real_fight1.mp4...
-    start "SmartOmniSentinel AI CAM-02 (Video)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video real_fight1.mp4 --camera "Parking Lot B" --live_frame dashboard/cam_laptop.jpg --engine pose
+echo Starting CAM-03: Stairwell C3 Video (Normal Non-Violent Loop)...
+start "SmartOmniSentinel AI CAM-03 (Stairwell)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video dashboard/cam_stairwell.mp4 --camera "Stairwell C3" --live_frame dashboard/cam_stairwell.jpg --engine pose
+goto RUN_DONE
 
-    echo Starting CAM-03: cam_stairwell.mp4...
-    start "SmartOmniSentinel AI CAM-03 (Stairwell)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video dashboard/cam_stairwell.mp4 --camera "Stairwell C3" --live_frame dashboard/cam_stairwell.jpg --engine pose
+:RUN_MODE_3
+echo.
+echo ========================================================
+echo   MODE 3: DROIDCAM PHONE ONLY
+echo ========================================================
+set DEFAULT_IP=10.92.36.164
+echo Enter the WiFi IP Address shown in your DroidCam phone app:
+set /p DROID_IP="IP Address [default: %DEFAULT_IP%]: "
+if "%DROID_IP%"=="" set DROID_IP=%DEFAULT_IP%
 
-) else (
-    REM Default: Option 1 (All 3 Live Feeds)
-    set DEFAULT_IP=192.168.137.120
-    echo.
-    echo Enter the WiFi IP Address shown in your DroidCam phone app:
-    set /p DROID_IP="IP Address [default: %DEFAULT_IP%]: "
-    if "%DROID_IP%"=="" set DROID_IP=%DEFAULT_IP%
+echo Starting CAM-01: DroidCam Mobile Camera (http://%DROID_IP%:4747/video)...
+start "SmartOmniSentinel AI CAM-01 (Mobile)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video http://%DROID_IP%:4747/video --camera "Main Entrance" --live_frame dashboard/cam_mobile.jpg --engine pose
 
-    echo.
-    echo Starting CAM-01: DroidCam Mobile Camera (http://%DROID_IP%:4747/video)...
-    start "SmartOmniSentinel AI CAM-01 (Mobile)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video http://%DROID_IP%:4747/video --camera "Main Entrance" --live_frame dashboard/cam_mobile.jpg --engine pose
+echo Starting CAM-02: Laptop Webcam (Built-in Camera 0)...
+start "SmartOmniSentinel AI CAM-02 (Laptop)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video 0 --camera "Parking Lot B" --live_frame dashboard/cam_laptop.jpg --engine pose
+goto RUN_DONE
 
-    echo Starting CAM-02: Laptop Webcam (Built-in Camera 0)...
-    start "SmartOmniSentinel AI CAM-02 (Laptop)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video 0 --camera "Parking Lot B" --live_frame dashboard/cam_laptop.jpg --engine pose
+:RUN_MODE_4
+echo.
+echo ========================================================
+echo   MODE 4: ALL-VIDEO SIMULATION MODE (No webcams needed)
+echo ========================================================
+echo Starting CAM-01: real_fight.mp4...
+start "SmartOmniSentinel AI CAM-01 (Video)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video real_fight.mp4 --camera "Main Entrance" --live_frame dashboard/cam_mobile.jpg --engine pose
 
-    echo Starting CAM-03: Stairwell C3 Video (Normal Non-Violent Loop)...
-    start "SmartOmniSentinel AI CAM-03 (Stairwell)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video dashboard/cam_stairwell.mp4 --camera "Stairwell C3" --live_frame dashboard/cam_stairwell.jpg --engine pose
-)
+echo Starting CAM-02: real_fight1.mp4...
+start "SmartOmniSentinel AI CAM-02 (Video)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video real_fight1.mp4 --camera "Parking Lot B" --live_frame dashboard/cam_laptop.jpg --engine pose
+
+echo Starting CAM-03: cam_stairwell.mp4...
+start "SmartOmniSentinel AI CAM-03 (Stairwell)" cmd /k .\venv\Scripts\python.exe scripts/demo_ingest.py --video dashboard/cam_stairwell.mp4 --camera "Stairwell C3" --live_frame dashboard/cam_stairwell.jpg --engine pose
+goto RUN_DONE
+
+:RUN_DONE
 
 :: ============================================================================== 
 :: HOW TO SWITCH AI ENGINES (MODELS)

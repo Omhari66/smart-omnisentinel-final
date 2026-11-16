@@ -501,12 +501,28 @@ async def run_ingest(
     if str(video_path).isdigit():
         src = int(video_path)
         cap = cv2.VideoCapture(src, cv2.CAP_DSHOW)
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(src)
     else:
         src = video_path
         cap = cv2.VideoCapture(src)
+        if not cap.isOpened() and "4747" in str(video_path):
+            alt_url = str(video_path).replace("/video", "/mjpegfeed")
+            print(f"  [DroidCam] Retrying with alternate endpoint: {alt_url} ...")
+            cap = cv2.VideoCapture(alt_url)
 
     if not cap.isOpened():
-        print(f"ERROR: Cannot open: {video_path}")
+        print(f"\n❌ ERROR: Cannot open video source: {video_path}")
+        if "4747" in str(video_path):
+            print("\n  [DroidCam Troubleshooting Guide]")
+            print("  1. Phone par DroidCam app OPEN aur screen ON honi chahiye (background me video band ho jaati hai).")
+            print("  2. Phone aur Laptop SAME Wi-Fi ya Phone ke Mobile Hotspot se connect hone chahiye.")
+            print("  3. DroidCam app me dikh raha 'WiFi IP' aur 'Port 4747' check karein.")
+            print("  4. Laptop browser me http://<PHONE_IP>:4747 khol kar test karein ki video dikh rahi hai ya nahi.")
+        elif str(video_path).isdigit():
+            print(f"\n  [Webcam Troubleshooting Guide]")
+            print(f"  1. Camera {video_path} ko koi doosra app (Zoom, Teams, Camera app, Chrome) use to nahi kar raha?")
+            print("  2. Windows Settings -> Privacy & Security -> Camera me 'Allow desktop apps' ON karein.")
         return
 
     src_fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
