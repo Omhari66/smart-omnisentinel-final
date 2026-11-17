@@ -940,12 +940,13 @@
             let _mobileErrCount = 0;
             let _stairwellErrCount = 0;
             setInterval(() => {
+                const now = Date.now();
                 // CAM-02: Laptop Webcam (smooth preloaded swap)
                 const laptopImg = document.getElementById('laptop-webcam');
                 if (laptopImg) {
                     const t2 = new Image();
                     t2.onload = () => { laptopImg.src = t2.src; };
-                    t2.src = 'cam_laptop.jpg?t=' + Date.now();
+                    t2.src = 'cam_laptop.jpg?t=' + now;
                 }
 
                 // CAM-01: Mobile Camera (with video fallback)
@@ -955,7 +956,7 @@
                     const t = new Image();
                     t.onload = () => { _mobileErrCount=0; mobileImg.src=t.src; mobileImg.style.display='block'; if(fallback) fallback.style.display='none'; };
                     t.onerror = () => { _mobileErrCount++; if(_mobileErrCount>=5){ mobileImg.style.display='none'; if(fallback) fallback.style.display='block'; } };
-                    t.src = 'cam_mobile.jpg?t=' + Date.now();
+                    t.src = 'cam_mobile.jpg?t=' + now;
                 }
 
                 // CAM-03: Stairwell C3 (with video fallback)
@@ -965,9 +966,9 @@
                     const t3 = new Image();
                     t3.onload = () => { _stairwellErrCount=0; stairwellImg.src=t3.src; stairwellImg.style.display='block'; if(stairwellFallback) stairwellFallback.style.display='none'; };
                     t3.onerror = () => { _stairwellErrCount++; if(_stairwellErrCount>=5){ stairwellImg.style.display='none'; if(stairwellFallback) stairwellFallback.style.display='block'; } };
-                    t3.src = 'cam_stairwell.jpg?t=' + Date.now();
+                    t3.src = 'cam_stairwell.jpg?t=' + now;
                 }
-            }, 150);
+            }, 200);
         } catch(e) { console.error('Init error:', e); }
     }
 

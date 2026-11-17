@@ -188,10 +188,13 @@ async def get_or_create_demo_camera(camera_name: str) -> uuid.UUID:
     from db.models.camera import Camera
     from core.constants import CameraStatus
 
+    clean_name = camera_name.replace("_", " ").strip('\'"\\')
     factory = get_session_factory()
     async with factory() as db:
         result = await db.execute(
-            select(Camera).where(Camera.name == camera_name)
+            select(Camera).where(
+                (Camera.name == camera_name) | (Camera.name == clean_name)
+            )
         )
         cam = result.scalar_one_or_none()
         if cam:
@@ -202,7 +205,7 @@ async def get_or_create_demo_camera(camera_name: str) -> uuid.UUID:
         # Fallback: create a camera if seed wasn't run
         from datetime import datetime, timezone
         new_cam = Camera(
-            name=camera_name,
+            name=clean_name,
             stream_url="rtsp://192.168.1.10/stream1",
             location="Building A – Front Door",
             status=CameraStatus.ACTIVE,
@@ -567,26 +570,45 @@ async def run_ingest(
     total_inserted = 0
     prev_gray      = None
     _last_roi_mtime = 0.0
+    missed_frames  = 0
     global CURRENT_THRESHOLD, CURRENT_COOLDOWN, CURRENT_PERSISTENCE
 
     try:
         while True:
             ret, frame = cap.read()
             if not ret:
-                # If it's a live camera, don't infinitely loop if it fails
+                # If it's a live camera or stream, don't crash on a single dropped frame
                 if isinstance(src, int) or str(src).isdigit():
-                    print("\nERROR: Cannot grab frame from webcam. Is it being used by another program?")
-                    break
-                    
+                    missed_frames += 1
+                    if missed_frames > 25:
+                        print("\n[Webcam] Missed 25 consecutive frames. Attempting to reconnect...")
+                        cap.release()
+                        time.sleep(0.5)
+                        cap = cv2.VideoCapture(int(src), cv2.CAP_DSHOW)
+                        missed_frames = 0
+                    time.sleep(0.04)
+                    continue
+
+                if "4747" in str(src) or "http" in str(src):
+                    missed_frames += 1
+                    if missed_frames > 20:
+                        print(f"  [Stream] Temporary signal loss on {src}. Reconnecting...")
+                        cap.release()
+                        time.sleep(0.8)
+                        cap = cv2.VideoCapture(str(src))
+                        missed_frames = 0
+                    time.sleep(0.08)
+                    continue
+
+                # File source reached end -> loop seamlessly
                 cap.release()
-                if isinstance(src, int) or str(src).isdigit():
-                    cap = cv2.VideoCapture(int(src), cv2.CAP_DSHOW)
-                else:
-                    cap = cv2.VideoCapture(str(src))
+                time.sleep(0.02)
+                cap = cv2.VideoCapture(str(src))
                 states.clear()
                 track_last_seen.clear()
-                print("  [video looped]")
                 continue
+
+            missed_frames = 0
 
             frame_idx += 1
             if frame_idx % skip != 0:
@@ -631,17 +653,23 @@ async def run_ingest(
             # Push frame into circular buffer for evidence clips
             push_frame_to_buffer(camera_id_str, frame)
             
-            # Export to Dashboard if requested (using atomic write with retries to avoid Windows file locks)
+            # Export to Dashboard if requested (atomic write with fallback for Windows file locks)
             if live_frame_path:
                 tmp_frame_path = live_frame_path + ".tmp.jpg"
-                if cv2.imwrite(tmp_frame_path, frame):
-                    import time
-                    for _ in range(5):
-                        try:
-                            os.replace(tmp_frame_path, live_frame_path)
-                            break
-                        except Exception:
-                            time.sleep(0.01)
+                try:
+                    if cv2.imwrite(tmp_frame_path, frame):
+                        replaced = False
+                        for _ in range(3):
+                            try:
+                                os.replace(tmp_frame_path, live_frame_path)
+                                replaced = True
+                                break
+                            except Exception:
+                                time.sleep(0.01)
+                        if not replaced:
+                            cv2.imwrite(live_frame_path, frame)
+                except Exception:
+                    pass
 
             # ── Pose estimation with ByteTrack (Multi-Person Tracking) ────────
             # persist=True tells Ultralytics to keep track IDs stable across frames
@@ -788,7 +816,10 @@ if __name__ == "__main__":
     parser.add_argument("--no-llm",     dest="llm", action="store_false", help="Disable local Ollama LLM summarization")
     parser.set_defaults(llm=True)
     parser.add_argument("--llm_model",  type=str, default="moondream", help="Ollama model name (default: moondream)")
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
+    if unknown:
+        print(f"  [Notice] Ignoring extra cli arguments: {unknown}")
+    args.camera = args.camera.replace("_", " ").strip('\'"\\')
 
     # Load ROI polygon from JSON file if path is given
     roi_zone = load_roi_zone(args.roi_zone) if args.roi_zone else None
