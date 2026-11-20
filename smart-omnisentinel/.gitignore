@@ -109,6 +109,8 @@ temp/
 *.tmp
 *.bak
 *.orig
+*.zip
+*_Submission/
 
 # --- Large binaries and media ---
 *.pt
